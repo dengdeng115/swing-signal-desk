@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-18 · Discord 真实端到端验收
+
+- `duobot` 已用最小只读权限加入用户控制的测试服务器；Bot Token 仅保存于被 Git 忽略的本机 `.env`，未进入聊天、日志或仓库。
+- 实际登录验证成功，目标测试频道具备 View Channel 与 Read Message History；本地健康检查返回 Discord 已启用。
+- 中文样本“减仓止盈半仓 NVDA 价格220”从 Discord 到本地记录约 0.215 秒，正确解析为 NVDA / sell / 50% / 220，置信度 100%，状态仍为 `pending_review`。
+- 第二条样本约 0.196 秒进入本地；同一 Discord Message ID 的创建、编辑和删除分别追加为 `create`、`update`、`delete` 三条记录，创建版 221 与编辑版 222 均保留。
+- 当前验收仍使用内存仓库，重启会清空本轮数据；只有 `create` 事件生成候选信号，编辑事件的候选修订/撤销逻辑仍待实现。
+- 真实服务器 ID、频道 ID、作者 ID 和 Token 仅保存在本机配置或运行数据中，不写入公开文档。
+
 ## 2026-09-18 · Discord 应用配置
 
 - 在 Discord Developer Portal 创建官方 Bot `duobot`。
