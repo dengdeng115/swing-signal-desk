@@ -12,13 +12,15 @@ npm start
 
 ## PostgreSQL 初始化
 
-本机已有 PostgreSQL 13。不要把密码发到聊天或提交到 GitHub。
+本机 PostgreSQL 已完成初始化。详细的角色、Navicat、迁移、验证和故障排查见 `docs/POSTGRES_SETUP.md`。不要把密码发到聊天或提交到 GitHub。
 
-1. 在 Navicat 中连接 `localhost`。
-2. 新建专用数据库 `swing_signal_desk` 和最小权限专用用户，避免让应用长期使用 `postgres` 超级用户。
-3. 在本机 `.env` 写入 `DATABASE_URL`。
-4. 执行 `npm run db:migrate`。
-5. 再执行 `npm start`，确认健康检查中的 `storage` 为 `postgres`。
+```powershell
+npm run db:migrate
+npm run db:verify
+npm start
+```
+
+健康检查必须显示 `storage: postgres` 与 `database: swing_signal_desk`。应用使用 `swing_signal_app`；Navicat 日常查看使用 `swing_signal_readonly`，不要长期使用 `postgres` 超级用户。
 
 ## Discord 接入
 

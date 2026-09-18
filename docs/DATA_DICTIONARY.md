@@ -12,6 +12,7 @@
 | `paper_fills` | 每笔模拟成交一行 | 计算延迟、滑点、费用和可执行收益 | `signal_price`, `fill_price`, `fees`, `signal_to_fill_ms` |
 | `position_snapshots` | 每个标的每次快照一行 | 重建持仓与盈亏变化 | `quantity`, `average_cost`, `market_value`, `captured_at` |
 | `audit_events` | 每个关键行为一行 | 可追溯失败、配置变化和人工操作 | `actor_type`, `action`, `entity_type`, `details` |
+| `schema_migrations` | 每个已执行迁移一行 | 防止重复执行数据库迁移 | `name`, `applied_at` |
 
 ## 口径
 
@@ -20,3 +21,4 @@
 - 可执行模拟收益：使用消息接收后可获得的行情、延迟、滑点和费用计算。
 - 置信度：解析器对结构完整性的估计，不代表交易成功概率。
 - `is_executable`：表示结构是否足以生成候选模拟单，不代表风控通过，也不代表真实下单授权。
+- 数据库存储使用下划线字段名，REST/SSE 输出统一映射为驼峰字段名；内存和 PostgreSQL 模式必须保持相同公共 API 结构。

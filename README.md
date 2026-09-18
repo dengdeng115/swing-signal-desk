@@ -4,7 +4,7 @@ Discord 美股波段频道消息留档、结构化解析、有限资金模拟跟
 
 - 在线静态演示：https://dengdeng115.github.io/swing-signal-desk/
 - 当前版本：v0.2.0
-- 状态：后端基础已完成；真实 Discord、长桥行情、AI Key 和在线 PostgreSQL 尚未启用。
+- 状态：本机 Discord 与 PostgreSQL 已启用；长桥行情、AI 和长期在线部署尚未启用。
 
 ## 已有能力
 
@@ -28,6 +28,7 @@ npm start
 
 ```powershell
 npm test
+npm run db:verify
 ```
 
 ## 项目地图
@@ -41,6 +42,7 @@ npm test
 - `docs/DATA_DICTIONARY.md`：表结构和指标口径。
 - `docs/SECURITY.md`：Discord 权限、密钥与 AI 安全规则。
 - `docs/OPERATIONS.md`：本机、数据库、Discord 和 AI 操作步骤。
+- `docs/POSTGRES_SETUP.md`：PostgreSQL 权限、Navicat、迁移、验证、备份和故障排查。
 - `docs/ROADMAP.md`：已完成与下一阶段。
 - `docs/CHANGELOG.md`：逐次变更和验证记录。
 

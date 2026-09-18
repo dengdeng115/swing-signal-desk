@@ -27,7 +27,10 @@ export class MemoryRepository {
   }
 
   async health() { return { storage: 'memory', ok: true }; }
-  async dashboard() { return clone(this.state); }
+  async dashboard() {
+    const state = clone(this.state);
+    return { ...state, positions: state.portfolio.positions };
+  }
   async getPortfolio() { return clone(this.state.portfolio); }
 
   async recordMessage(event) {

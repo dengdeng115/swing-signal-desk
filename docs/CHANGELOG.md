@@ -1,5 +1,16 @@
 # 变更记录
 
+## 2026-09-18 · PostgreSQL 本机持久化启用
+
+- PostgreSQL 13.21 创建项目数据库 `swing_signal_desk`、应用角色 `swing_signal_app` 和 Navicat 只读角色 `swing_signal_readonly`；两者均为随机 256 位密码且仅保存在本机忽略文件。
+- 应用角色不是超级用户，无创建数据库/角色/复制权限；只读角色默认事务只读，实际写入测试被 PostgreSQL `25006` 拒绝。
+- 执行迁移 `001_initial_schema.sql`、`002_discord_subscriptions.sql`，安装 `pgcrypto 1.3`，创建 11 张业务/迁移表和默认 1,000,000 USD 模拟组合。
+- 两条本机 Discord 订阅已写入数据库；真实 ID 未进入公开仓库。
+- 服务从内存模式切换为 PostgreSQL；写入 `manual_test` 后重启，消息和候选信号仍存在。
+- 统一 PostgreSQL 与内存仓库的 REST/SSE 驼峰字段结构，新增映射测试和 `npm run db:verify`。
+- 原 `pg_hba.conf` 已逐字节恢复，SHA-256 为 `844B54976378EA64CF9440355D8D637090712707F11E6BBF20C21C09CD75CB6A`；无密码 `postgres` 连接再次失败。
+- 新增 `docs/POSTGRES_SETUP.md`，记录权限、Navicat、迁移、验证、备份边界和故障排查。
+
 ## 2026-09-18 · Discord 真实端到端验收
 
 - `duobot` 已用最小只读权限加入用户控制的测试服务器；Bot Token 仅保存于被 Git 忽略的本机 `.env`，未进入聊天、日志或仓库。

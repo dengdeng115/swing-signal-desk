@@ -8,8 +8,8 @@
 
 - 当前是个人使用的模拟交易工作台，不连接真实券商，不自动下真实订单。
 - GitHub Pages 网址是静态演示；长期在线的数据采集、AI 和数据库需要独立后端服务器。
-- 本机已有 PostgreSQL 13 和 Navicat Premium 16；Navicat 连接名称为 `localhost`，目标为 `localhost:5432`、用户 `postgres`、初始库 `postgres`。密码不得写入仓库或聊天。
-- 本地后端没有 `DATABASE_URL` 时使用内存演示数据；设置后使用 PostgreSQL。
+- 本机 PostgreSQL 13.21 已创建项目数据库 `swing_signal_desk`、最小权限应用角色和 Navicat 只读角色；密码不得写入仓库或聊天。
+- 本地 `.env` 已设置 `DATABASE_URL`，后端默认使用 PostgreSQL。移除该值才会回退到重启即清空的内存演示模式。
 
 ## 核心决策
 
@@ -38,3 +38,4 @@
 3. 运行 `npm ci`、`npm test`。
 4. 检查 `git status` 和两个远端，避免覆盖用户修改。
 5. 数据库变更从 `db/migrations/` 追加新迁移，禁止重写已经上线的迁移。
+6. 运行 `npm run db:verify`，确认应用角色非超级用户、迁移完整、Navicat 角色只读。

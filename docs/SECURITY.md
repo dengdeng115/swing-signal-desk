@@ -13,10 +13,11 @@
 
 ## 密钥
 
-- `DISCORD_BOT_TOKEN`、`OPENAI_API_KEY`、`DATABASE_URL` 仅放服务器环境变量或密钥管理服务。
+- `DISCORD_BOT_TOKEN`、`OPENAI_API_KEY`、`DATABASE_URL`、`DATABASE_READONLY_URL` 仅放服务器环境变量或密钥管理服务。
 - `.env` 被 Git 忽略；`.env.example` 只能放空值和说明。
 - 日志不得输出 Authorization、密码、完整连接串或 Token。
 - Bot Token 只在 Discord Developer Portal 创建或重置后显示一次；不要发送到聊天、截图、GitHub Issue 或网页前端。
+- 应用使用非超级用户 `swing_signal_app`；Navicat 日常检查使用默认事务只读的 `swing_signal_readonly`。不要让应用或日常查看长期使用 `postgres`。
 
 ## AI
 
