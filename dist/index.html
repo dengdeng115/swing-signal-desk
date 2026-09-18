@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#071019" />
+  <meta name="description" content="美股波段频道消息解析、模拟持仓、资金利用率与收益复盘控制台" />
+  <title>波段信号台</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2308141f'/%3E%3Cpath d='M12 42l11-12 9 7 19-20' fill='none' stroke='%2335e8b4' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='51' cy='17' r='5' fill='%23ffcc66'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">↗</span><span>波段信号台<small>SWING DESK</small></span></div>
+      <nav aria-label="主导航">
+        <button class="nav-item active" data-target="overview"><span>⌁</span>实时总览</button>
+        <button class="nav-item" data-target="portfolio"><span>◫</span>模拟持仓</button>
+        <button class="nav-item" data-target="trades"><span>↹</span>交易流水</button>
+        <button class="nav-item" data-target="review"><span>⌇</span>策略复盘</button>
+        <button class="nav-item" data-target="rules"><span>◇</span>规则中心</button>
+      </nav>
+      <div class="side-status">
+        <div class="status-line"><span class="pulse-dot"></span><span>演示数据流运行中</span></div>
+        <div class="latency">消息延迟 <b>0.8s</b></div>
+        <button id="streamToggle" class="ghost full">暂停模拟推送</button>
+      </div>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div><p class="eyebrow">US STOCKS · PAPER FOLLOW</p><h1>实时跟单总览</h1></div>
+        <div class="top-actions">
+          <label class="capital-control">初始资金 <select id="capitalSelect" aria-label="初始资金"><option value="500000">$500,000</option><option value="1000000" selected>$1,000,000</option><option value="2000000">$2,000,000</option></select></label>
+          <button id="nextSignal" class="accent-button">接收下一条模拟消息</button>
+          <span class="paper-pill"><i></i>PAPER 仅模拟</span>
+        </div>
+      </header>
+
+      <section id="overview" class="section-anchor">
+        <div class="notice"><span>安全闸门</span><p>频道原文会永久保留；AI 只负责提取候选动作。模糊指令、超资金上限或低置信度信号必须人工确认。</p><button data-target="rules">查看规则</button></div>
+        <div class="stats-grid">
+          <article class="metric-card"><div class="metric-icon mint">$</div><div><span>账户权益</span><strong id="equityValue">$1,038,420</strong><small>现金 + 持仓市值</small></div></article>
+          <article class="metric-card"><div class="metric-icon blue">↗</div><div><span>累计收益</span><strong class="positive" id="returnValue">+$38,420</strong><small id="returnRate">+3.84% 起始至今</small></div></article>
+          <article class="metric-card"><div class="metric-icon gold">◒</div><div><span>资金利用率</span><strong id="utilValue">63.8%</strong><small>规则上限 70%</small></div><div class="tiny-progress"><i id="utilBar" style="width:91%"></i></div></article>
+          <article class="metric-card"><div class="metric-icon violet">✓</div><div><span>今日已实现</span><strong class="positive">+$6,880</strong><small>3 笔完成交易</small></div></article>
+        </div>
+
+        <div class="dashboard-grid">
+          <section class="panel signal-panel">
+            <div class="panel-head"><div><span class="kicker">LIVE SIGNALS</span><h2>频道消息 → 候选动作</h2></div><div class="live-badge"><i></i>监听中</div></div>
+            <div id="signalFeed" class="signal-feed" aria-live="polite"></div>
+          </section>
+
+          <aside class="panel risk-panel">
+            <div class="panel-head"><div><span class="kicker">CAPITAL GUARD</span><h2>资金与风险闸门</h2></div><span class="safe-chip">正常</span></div>
+            <div class="ring-row"><div class="allocation-ring"><div><strong id="ringValue">64%</strong><span>已投入</span></div></div><div class="ring-legend"><p><i class="mint-bg"></i>股票仓位 <b id="stockAlloc">$663,010</b></p><p><i class="cash-bg"></i>可用现金 <b id="cashValue">$375,410</b></p><p><i class="reserve-bg"></i>强制现金垫 <b>$300,000</b></p></div></div>
+            <div class="guard-list"><div><span>单一股票上限</span><b>≤ 20%</b><em>通过</em></div><div><span>组合利用率</span><b>≤ 70%</b><em>通过</em></div><div><span>单笔计划亏损</span><b>≤ 0.75%</b><em>通过</em></div><div><span>当日止损线</span><b>−2.0%</b><em>未触发</em></div></div>
+            <div class="capacity"><span>还可部署资金</span><strong id="capacityValue">$63,884</strong><small>达到 70% 上限前</small></div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="portfolio" class="section-anchor two-col-section">
+        <div class="panel positions-panel">
+          <div class="panel-head"><div><span class="kicker">OPEN POSITIONS</span><h2>当前模拟持仓</h2></div><button class="ghost" id="markPrices">刷新演示价格</button></div>
+          <div class="table-wrap"><table><thead><tr><th>标的</th><th>持仓 / 均价</th><th>现价</th><th>市值</th><th>仓位</th><th>未实现盈亏</th></tr></thead><tbody id="positionRows"></tbody></table></div>
+        </div>
+        <aside class="panel focus-card">
+          <span class="kicker">CONCENTRATION</span><h2>仓位集中度</h2>
+          <div id="exposureBars" class="exposure-bars"></div>
+          <p class="panel-note">以账户权益为分母。超过 20% 的标的会被风险闸门阻止继续加仓。</p>
+        </aside>
+      </section>
+
+      <section id="review" class="section-anchor review-grid">
+        <div class="panel curve-panel"><div class="panel-head"><div><span class="kicker">FORWARD TEST</span><h2>前向模拟收益曲线</h2></div><div class="legend"><span><i class="line-mint"></i>可执行收益</span><span><i class="line-dash"></i>信号理论收益</span></div></div><div class="chart-wrap"><svg viewBox="0 0 760 250" role="img" aria-label="近二十个交易日模拟收益曲线"><g class="grid-lines"><line x1="45" y1="35" x2="735" y2="35"/><line x1="45" y1="95" x2="735" y2="95"/><line x1="45" y1="155" x2="735" y2="155"/><line x1="45" y1="215" x2="735" y2="215"/></g><path class="area" d="M45 205 C105 195,115 180,160 188 S240 125,285 142 S350 90,405 112 S480 61,530 79 S610 44,735 52 L735 220 L45 220Z"/><path class="exec-line" d="M45 205 C105 195,115 180,160 188 S240 125,285 142 S350 90,405 112 S480 61,530 79 S610 44,735 52"/><path class="theory-line" d="M45 195 C110 170,125 166,165 170 S235 103,290 121 S350 72,410 89 S480 38,540 55 S620 26,735 32"/><g class="axis-labels"><text x="8" y="40">+5%</text><text x="8" y="100">+3%</text><text x="8" y="160">+1%</text><text x="23" y="220">0</text><text x="45" y="242">8/24</text><text x="376" y="242">9/04</text><text x="700" y="242">9/18</text></g><circle class="last-point" cx="735" cy="52" r="5"/></svg></div><div class="chart-metrics"><div><span>可执行收益</span><strong class="positive">+3.84%</strong></div><div><span>理论收益</span><strong>+4.72%</strong></div><div><span>执行损耗</span><strong class="negative">−0.88%</strong></div><div><span>最大回撤</span><strong>−1.46%</strong></div></div></div>
+        <aside class="panel score-panel"><span class="kicker">STRATEGY SCORE</span><h2>策略复盘</h2><div class="score"><strong>78</strong><span>/ 100<br/>稳健</span></div><div class="score-list"><div><span>胜率</span><b>66.7%</b></div><div><span>盈亏比</span><b>1.86</b></div><div><span>完成波段</span><b>12</b></div><div><span>平均持有</span><b>2.8 天</b></div></div><div class="insight"><b>本周结论</b><p>NVDA 分批止盈贡献最大；两次追高信号因资金闸门被缩小仓位，降低了回撤。</p></div></aside>
+      </section>
+
+      <section id="trades" class="section-anchor panel trades-panel">
+        <div class="panel-head"><div><span class="kicker">AUDIT TRAIL</span><h2>买入与卖出记录</h2></div><div class="filter-tabs"><button class="active" data-filter="all">全部</button><button data-filter="buy">买入</button><button data-filter="sell">卖出</button></div></div>
+        <div class="table-wrap"><table><thead><tr><th>时间</th><th>动作</th><th>标的</th><th>数量</th><th>信号价</th><th>模拟成交</th><th>延迟 / 滑点</th><th>已实现盈亏</th><th>来源</th></tr></thead><tbody id="tradeRows"></tbody></table></div>
+      </section>
+
+      <section id="rules" class="section-anchor rules-grid">
+        <div class="panel"><div class="panel-head"><div><span class="kicker">EXECUTION POLICY</span><h2>跟单解释规则</h2></div><span class="version-chip">规则 v0.3 · 未冻结</span></div><div class="rule-cards"><article><span>01</span><div><b>仓位词语必须量化</b><p>“半仓”默认解释为该标的当前持仓的 50%；“第一笔”默认使用账户权益的 4%。上线前可逐条修改。</p></div></article><article><span>02</span><div><b>价格不追单</b><p>收到消息后参考实时行情；偏离信号价超过 0.8% 时，不自动模拟成交，转为待确认。</p></div></article><article><span>03</span><div><b>模糊消息不执行</b><p>“可以关注”“可能起飞”“剩下拿着”等仅记录为观点，不生成买卖动作。</p></div></article><article><span>04</span><div><b>资金永远有限</b><p>保留至少 30% 现金，单一股票不超过 20%，所有未完成买单占用预留资金。</p></div></article></div></div>
+        <aside class="panel setup-panel"><span class="kicker">BEFORE CONNECTING</span><h2>正式接入前还需要这些</h2><ol><li><b>Discord 范围</b><span>服务器、频道 ID、信号发布者账号、是否读取编辑和附件</span></li><li><b>消息样本</b><span>至少 1–2 周原始消息，用来冻结“半仓、第一笔、清仓”等词义</span></li><li><b>账户假设</b><span>初始资金、手续费、滑点、允许最大仓位、是否允许盘前盘后</span></li><li><b>成交规则</b><span>限价未成交、跳空、停牌、拆股、同一根 K 线同时触发止盈止损的处理</span></li><li><b>提醒渠道</b><span>网页声音、桌面通知或手机提醒；不代替你在券商端手动下单</span></li></ol><div class="permission-box"><b>管理员需开放的最小权限</b><p>官方 Bot：查看频道、读取历史消息；读取正文通常还需 Message Content Intent。不要提供个人账号 Token，也不要使用 self-bot。</p></div></aside>
+      </section>
+      <footer><p>演示原型 · 所有行情、消息和收益均为模拟数据，不构成投资建议</p><button id="resetDemo">重置演示</button></footer>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
