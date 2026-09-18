@@ -11,6 +11,24 @@ const booleanFromEnv = (name, fallback = false) => {
   return value.toLowerCase() === 'true';
 };
 
+function discordSubscriptionsFromEnv() {
+  const raw = process.env.DISCORD_SUBSCRIPTIONS_JSON;
+  if (raw && raw !== '[]') {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) throw new Error('DISCORD_SUBSCRIPTIONS_JSON must be an array');
+    return parsed.map((item) => ({
+      guildId: String(item.guildId || ''),
+      channelId: String(item.channelId || ''),
+      authorIds: Array.isArray(item.authorIds) ? item.authorIds.map(String) : []
+    }));
+  }
+
+  const guildId = process.env.DISCORD_GUILD_ID || '';
+  const channelIds = (process.env.DISCORD_CHANNEL_IDS || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const authorIds = (process.env.DISCORD_AUTHOR_IDS || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return channelIds.map((channelId) => ({ guildId, channelId, authorIds }));
+}
+
 export function loadConfig() {
   return {
     port: numberFromEnv('PORT', 8787),
@@ -21,7 +39,8 @@ export function loadConfig() {
       token: process.env.DISCORD_BOT_TOKEN || '',
       guildId: process.env.DISCORD_GUILD_ID || '',
       channelIds: (process.env.DISCORD_CHANNEL_IDS || '').split(',').map((x) => x.trim()).filter(Boolean),
-      authorIds: (process.env.DISCORD_AUTHOR_IDS || '').split(',').map((x) => x.trim()).filter(Boolean)
+      authorIds: (process.env.DISCORD_AUTHOR_IDS || '').split(',').map((x) => x.trim()).filter(Boolean),
+      subscriptions: discordSubscriptionsFromEnv()
     },
     ai: {
       enabled: booleanFromEnv('AI_ENABLED'),
@@ -40,8 +59,13 @@ export function loadConfig() {
 }
 
 export function validateEnabledIntegrations(config) {
-  if (config.discord.enabled && (!config.discord.token || !config.discord.guildId || config.discord.channelIds.length === 0 || config.discord.authorIds.length === 0)) {
-    throw new Error('DISCORD_ENABLED requires DISCORD_BOT_TOKEN, DISCORD_GUILD_ID, DISCORD_CHANNEL_IDS and DISCORD_AUTHOR_IDS');
+  if (config.discord.enabled) {
+    if (!config.discord.token || config.discord.subscriptions.length === 0) {
+      throw new Error('DISCORD_ENABLED requires DISCORD_BOT_TOKEN and at least one Discord subscription');
+    }
+    if (config.discord.subscriptions.some((item) => !item.guildId || !item.channelId)) {
+      throw new Error('Every Discord subscription requires guildId and channelId');
+    }
   }
   if (config.ai.enabled && (!config.ai.apiKey || !config.ai.model)) {
     throw new Error('AI_ENABLED requires OPENAI_API_KEY and OPENAI_MODEL');

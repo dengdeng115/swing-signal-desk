@@ -60,9 +60,10 @@ export async function startDiscordBot({ config, repository, onEvent = () => {} }
 }
 
 export function isAllowedDiscordMessage(message, discordConfig, eventType = 'create') {
-  const scopeMatches = message.guildId === discordConfig.guildId
-    && new Set(discordConfig.channelIds).has(message.channelId);
-  if (!scopeMatches || message.author?.bot) return false;
+  if (message.author?.bot) return false;
+  const subscriptions = discordConfig.subscriptions || [];
+  const matchingScope = subscriptions.find((item) => item.guildId === message.guildId && item.channelId === message.channelId);
+  if (!matchingScope) return false;
   if (eventType === 'delete' && !message.author?.id) return true;
-  return new Set(discordConfig.authorIds).has(message.author?.id);
+  return matchingScope.authorIds.length === 0 || matchingScope.authorIds.includes(message.author?.id);
 }

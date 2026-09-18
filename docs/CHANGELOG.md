@@ -4,6 +4,7 @@
 
 - 增加 `DISCORD_GUILD_ID` 与 `DISCORD_AUTHOR_IDS` 配置。
 - 消息必须同时匹配服务器、频道、发布者，并且发布者不能是 Bot，才会进入留档和解析流程。
+- 增加多订阅配置和 `discord_subscriptions` 数据表；每个频道可独立配置多个发布者，也可监听该频道全部非 Bot 用户。
 - 真实 Discord ID 仅保存在被 Git 忽略的本机 `.env`，不进入公开仓库。
 
 ## 2026-09-18 · v0.2.0 基础后端

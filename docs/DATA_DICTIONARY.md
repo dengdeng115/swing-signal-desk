@@ -4,6 +4,7 @@
 |---|---|---|---|
 | `portfolios` | 每个模拟组合一行 | 资金、现金和风控上限 | `initial_capital`, `current_cash`, `current_equity` |
 | `discord_message_events` | 每次消息事件一行 | 保存新建、编辑、删除，不覆盖历史 | `discord_message_id`, `event_type`, `content`, `received_at` |
+| `discord_subscriptions` | 每个频道/发布者订阅一行 | 管理多个服务器、频道和发布者；发布者为空表示监听频道内所有真人用户 | `guild_id`, `channel_id`, `author_id`, `enabled` |
 | `signal_interpretations` | 每次解析一行 | 保存规则或 AI 的候选结构 | `parser_version`, `symbol`, `action`, `confidence`, `status` |
 | `review_decisions` | 每次人工决定一行 | 确认、忽略、拒绝或修正 | `decision`, `reviewer`, `edited_payload` |
 | `market_quotes` | 每个标的每个行情时点一行 | 区分行情时间和收到时间 | `source`, `bid`, `ask`, `last_price`, `quote_time` |
