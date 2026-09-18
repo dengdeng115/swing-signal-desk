@@ -40,7 +40,7 @@ npm run db:verify
 - `test/`：解析、风控和 API 自动测试。
 - `docs/PROJECT_CONTEXT.md`：目标、边界、默认规则和下次继续入口。
 - `docs/ARCHITECTURE.md`：架构和可信边界。
-- `docs/DATA_DICTIONARY.md`：表结构和指标口径。
+- `docs/DATA_DICTIONARY.md`：11 张表、全部字段、状态值、指标口径和 Navicat 只读查询。
 - `docs/SECURITY.md`：Discord 权限、密钥与 AI 安全规则。
 - `docs/OPERATIONS.md`：本机、数据库、Discord 和 AI 操作步骤。
 - `docs/POSTGRES_SETUP.md`：PostgreSQL 权限、Navicat、迁移、验证、备份和故障排查。
