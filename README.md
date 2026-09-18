@@ -1,16 +1,51 @@
 # 波段信号台
 
-美股波段频道消息解析、模拟持仓、资金利用率与收益复盘网页原型。
+Discord 美股波段频道消息留档、结构化解析、有限资金模拟跟单、持仓和收益复盘工作台。
 
-当前版本仅使用演示数据，不连接 Discord、长桥或真实券商，也不会执行真实交易。
+- 在线静态演示：https://dengdeng115.github.io/swing-signal-desk/
+- 当前版本：v0.2.0
+- 状态：后端基础已完成；真实 Discord、长桥行情、AI Key 和在线 PostgreSQL 尚未启用。
 
-## 后续架构
+## 已有能力
 
-- Discord 官方 Bot：采集指定频道的原始消息、编辑和删除事件。
-- 规则引擎：优先处理明确的买入、减仓、止盈和止损表达。
-- AI 解析：将口语化消息转换为结构化候选动作，低置信度必须人工确认。
-- 行情与模拟成交：记录信号价、收到时行情、模拟成交价、延迟、滑点和费用。
-- 数据库：保存消息、信号、持仓、订单、成交和规则版本。
-- 网页：通过实时推送更新消息、风险、持仓和收益。
+- 规则解析“减仓止盈半仓 NVDA 价格220”等中文指令。
+- 模糊、条件性或低置信度消息标记为不可自动模拟。
+- 检查资金利用率、单股集中度、现金垫和消息时延。
+- 保存 Discord 新建、编辑、删除事件的数据模型。
+- 提供 REST API、SSE 推送、PostgreSQL 迁移和内存演示模式。
+- 预留 Discord 官方 Bot 与 OpenAI 严格结构化输出适配器。
+- GitHub Actions 自动测试；GitHub Pages 自动发布静态网页。
 
-模型 API 密钥只能保存在服务器环境变量中，不能写入本仓库或发送到浏览器。
+## 快速开始
+
+```powershell
+npm ci
+Copy-Item .env.example .env
+npm start
+```
+
+打开 `http://localhost:8787`。默认使用内存演示仓库，不需要数据库密码。
+
+```powershell
+npm test
+```
+
+## 项目地图
+
+- `dist/`：静态网页。
+- `server/src/`：API、规则解析、风控、Discord 和 AI 适配器。
+- `db/migrations/`：PostgreSQL 数据库版本。
+- `test/`：解析、风控和 API 自动测试。
+- `docs/PROJECT_CONTEXT.md`：目标、边界、默认规则和下次继续入口。
+- `docs/ARCHITECTURE.md`：架构和可信边界。
+- `docs/DATA_DICTIONARY.md`：表结构和指标口径。
+- `docs/SECURITY.md`：Discord 权限、密钥与 AI 安全规则。
+- `docs/OPERATIONS.md`：本机、数据库、Discord 和 AI 操作步骤。
+- `docs/ROADMAP.md`：已完成与下一阶段。
+- `docs/CHANGELOG.md`：逐次变更和验证记录。
+
+## 重要边界
+
+本项目目前只做记录、分析和模拟交易，不连接真实券商，不执行真实订单。网页中的行情、消息和收益在未接入正式数据源前均为演示数据，不构成投资建议。
+
+密钥只能保存在服务器环境变量中，禁止提交 `.env`、Discord Token、数据库密码或模型 API Key。

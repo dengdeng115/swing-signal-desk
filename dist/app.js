@@ -34,6 +34,21 @@ function currentValue() { return positions.reduce((sum,p)=>sum+p.shares*p.price,
 function pnl(p) { return (p.price-p.avg)*p.shares; }
 function showToast(message) { const el=document.querySelector('#toast'); el.textContent=message; el.classList.add('show'); clearTimeout(showToast.timer); showToast.timer=setTimeout(()=>el.classList.remove('show'),2800); }
 
+async function probeBackend() {
+  const backendState=document.querySelector('#backendState');
+  const storageState=document.querySelector('#storageState');
+  try {
+    const response=await fetch('api/health',{headers:{Accept:'application/json'}});
+    if(!response.ok) throw new Error('backend unavailable');
+    const health=await response.json();
+    backendState.textContent='后端服务已连接';
+    storageState.textContent=`存储 ${health.storage} · API v${health.version}`;
+  } catch {
+    backendState.textContent='静态演示模式';
+    storageState.textContent='未连接 Discord、行情或数据库';
+  }
+}
+
 function renderSignals() {
   const visible = signals.slice(0, signalCursor).slice().reverse();
   document.querySelector('#signalFeed').innerHTML = visible.map(s => `
@@ -96,3 +111,4 @@ document.querySelectorAll('.filter-tabs button').forEach(btn=>btn.addEventListen
 document.querySelector('#resetDemo').addEventListener('click',()=>location.reload());
 
 renderSignals();renderPositions();renderTrades();
+probeBackend();

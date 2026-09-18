@@ -1,2 +1,9 @@
 .sites-runtime/
 site-package.tar.gz
+node_modules/
+.env
+.env.*
+!.env.example
+coverage/
+*.log
+server/data/
