@@ -1,5 +1,14 @@
 # 变更记录
 
+## 2026-09-18 · Discord 应用配置
+
+- 在 Discord Developer Portal 创建官方 Bot `duobot`。
+- 已开启 Message Content Intent；Presence Intent 与 Server Members Intent 保持关闭。
+- 固定最小邀请权限为 View Channel + Read Message History（权限整数 `66560`），不授予发言或管理员权限。
+- 增加 Application ID、最小权限邀请、私密频道权限覆盖和 Token 保管的操作说明。
+- 当前仍未启用真实采集：等待服务器管理员完成邀请，以及用户本人把 Token 写入被 Git 忽略的本机环境变量。
+- 修改前验证：`npm ci` 成功，`npm test` 12/12 通过，依赖审计为 0 个漏洞。
+
 ## 2026-09-18 · Discord 精确范围过滤
 
 - 增加 `DISCORD_GUILD_ID` 与 `DISCORD_AUTHOR_IDS` 配置。
