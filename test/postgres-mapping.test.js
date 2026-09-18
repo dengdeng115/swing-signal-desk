@@ -38,12 +38,13 @@ test('maps PostgreSQL signal numerics and preserved parsed payload', () => {
     is_executable: true,
     reasons: [],
     message_event_id: 'event-1',
-    parsed_payload: { parser: 'rules-v1', rawText: '减仓止盈半仓 NVDA 价格222', risk: { mode: 'paper_only' } }
+    parsed_payload: { parser: 'rules-v1.1', rawText: '减仓止盈半仓 NVDA 价格222', ambiguous: false, risk: { mode: 'paper_only' } }
   });
 
   assert.equal(mapped.price, 222);
   assert.equal(mapped.fraction, 0.5);
   assert.equal(mapped.rawText, '减仓止盈半仓 NVDA 价格222');
+  assert.equal(mapped.ambiguous, false);
   assert.deepEqual(mapped.risk, { mode: 'paper_only' });
 });
 

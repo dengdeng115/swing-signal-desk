@@ -7,6 +7,7 @@
 - [x] PostgreSQL 初始表结构和迁移器
 - [x] 内存演示仓库
 - [x] 中文规则解析器与基础测试
+- [x] 规则 v1.1 多动作/多标的歧义检测与历史候选审计修正
 - [x] 资金/集中度/现金垫/时延风控
 - [x] 官方 Discord Bot 采集骨架
 - [x] 创建 Discord Bot `duobot` 并开启 Message Content Intent

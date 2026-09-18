@@ -1,5 +1,12 @@
 # 变更记录
 
+## 2026-09-18 · 规则解析器 v1.1 多动作安全闸门
+
+- 真实消息同时包含 NVDA 减仓与另一个疑似拼写错误标的买入，暴露出 v1 只解析第一段却标记可执行的问题。
+- v1.1 检测同一消息中的多个交易动作、多个或未验证的股票标识；此类消息强制 `ambiguous=true`、降低置信度并禁止自动执行。
+- 原 v1 候选保留但状态改为 `rejected`，追加正式拒绝决定和审计记录；同一原始消息新增 v1.1 不可执行候选，原始 Discord 事件未修改。
+- 新增混合动作、多个大写股票代码测试；全部自动测试增至 17 项。
+
 ## 2026-09-18 · PostgreSQL 本机持久化启用
 
 - PostgreSQL 13.21 创建项目数据库 `swing_signal_desk`、应用角色 `swing_signal_app` 和 Navicat 只读角色 `swing_signal_readonly`；两者均为随机 256 位密码且仅保存在本机忽略文件。
@@ -7,6 +14,7 @@
 - 执行迁移 `001_initial_schema.sql`、`002_discord_subscriptions.sql`，安装 `pgcrypto 1.3`，创建 11 张业务/迁移表和默认 1,000,000 USD 模拟组合。
 - 两条本机 Discord 订阅已写入数据库；真实 ID 未进入公开仓库。
 - 服务从内存模式切换为 PostgreSQL；写入 `manual_test` 后重启，消息和候选信号仍存在。
+- 真实 Discord 无结构测试消息约 0.324 秒写入 PostgreSQL；规则解析为 `note`、置信度 40%、不可执行，服务重启后消息与候选信号均仍存在。
 - 统一 PostgreSQL 与内存仓库的 REST/SSE 驼峰字段结构，新增映射测试和 `npm run db:verify`。
 - 新增 `npm run db:backup`：使用 `pg_dump` 自定义格式、生成 SHA-256 清单，并用 `pg_restore --list` 检查归档可读性；备份目录被 Git 忽略。
 - 原 `pg_hba.conf` 已逐字节恢复，SHA-256 为 `844B54976378EA64CF9440355D8D637090712707F11E6BBF20C21C09CD75CB6A`；无密码 `postgres` 连接再次失败。

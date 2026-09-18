@@ -32,6 +32,7 @@ export function mapPostgresSignal(row) {
     fraction: nullableNumber(row.position_fraction),
     stopPrice: nullableNumber(row.stop_price),
     conditional: row.is_conditional,
+    ambiguous: Boolean(payload.ambiguous),
     confidence: Number(row.confidence),
     executable: row.is_executable,
     reasons: row.reasons || [],
