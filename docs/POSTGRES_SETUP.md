@@ -26,6 +26,7 @@
 npm ci
 npm run db:migrate
 npm run db:verify
+npm run db:backup
 npm start
 ```
 
@@ -78,7 +79,9 @@ select current_database(), current_user,
 
 ## 备份与恢复边界
 
-当前只完成结构、权限和连接验证，尚未建立自动备份。正式积累频道数据前必须增加：
+运行 `npm run db:backup` 会在被 Git 忽略的 `server/data/backups/` 生成 PostgreSQL 自定义格式 `.dump` 和同名 JSON 清单。清单包含创建时间、文件大小、SHA-256，并且只有 `pg_restore --list` 成功后才标记 `archiveListVerified: true`。
+
+当前已具备本机手动备份和归档完整性检查，但尚未建立自动调度。正式长期运行前还必须增加：
 
 - 每日 `pg_dump` 自定义格式备份；
 - 至少一份复制到不同磁盘或加密远程存储；
@@ -93,4 +96,5 @@ select current_database(), current_user,
 - `28P01` 或“密码认证失败”：不要改成永久 `trust`；检查连接使用的角色和本机 `.env`。
 - `25006`：当前是只读角色，属于预期保护；迁移和应用必须使用 `swing_signal_app`。
 - `relation does not exist`：执行 `npm run db:migrate`，再运行 `npm run db:verify`。
+- `pg_dump failed`：检查 PostgreSQL 服务、`DATABASE_URL` 和可选的 `PG_DUMP_PATH`；不要把密码拼进命令行。
 - 服务重启后 Discord 离线：同时检查 `DISCORD_ENABLED=true`、Bot Token 和 `/api/health`。

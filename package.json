@@ -9,7 +9,8 @@
     "start": "node server/src/index.js",
     "test": "node --test",
     "db:migrate": "node server/scripts/migrate.js",
-    "db:verify": "node server/scripts/verify-database.js"
+    "db:verify": "node server/scripts/verify-database.js",
+    "db:backup": "node server/scripts/backup-database.js"
   },
   "engines": {
     "node": ">=22"

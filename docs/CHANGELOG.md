@@ -8,6 +8,7 @@
 - 两条本机 Discord 订阅已写入数据库；真实 ID 未进入公开仓库。
 - 服务从内存模式切换为 PostgreSQL；写入 `manual_test` 后重启，消息和候选信号仍存在。
 - 统一 PostgreSQL 与内存仓库的 REST/SSE 驼峰字段结构，新增映射测试和 `npm run db:verify`。
+- 新增 `npm run db:backup`：使用 `pg_dump` 自定义格式、生成 SHA-256 清单，并用 `pg_restore --list` 检查归档可读性；备份目录被 Git 忽略。
 - 原 `pg_hba.conf` 已逐字节恢复，SHA-256 为 `844B54976378EA64CF9440355D8D637090712707F11E6BBF20C21C09CD75CB6A`；无密码 `postgres` 连接再次失败。
 - 新增 `docs/POSTGRES_SETUP.md`，记录权限、Navicat、迁移、验证、备份边界和故障排查。
 
