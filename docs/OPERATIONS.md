@@ -22,7 +22,7 @@ npm start
 
 ## Discord 接入
 
-先完成 `docs/SECURITY.md` 中的权限。把 Token 与频道 ID 写入服务器环境变量，然后设置 `DISCORD_ENABLED=true`。首次启用后用测试频道发送样本消息，逐条核对原文、编辑记录、接收延迟和解析结果。
+先完成 `docs/SECURITY.md` 中的权限。把 Token、服务器 ID、频道 ID 与允许的发布者 ID 写入服务器环境变量，然后设置 `DISCORD_ENABLED=true`。采集器同时核对服务器、频道和作者，任何一项不匹配都忽略。首次启用后用测试频道发送样本消息，逐条核对原文、编辑记录、接收延迟和解析结果。
 
 ## AI 接入
 

@@ -1,5 +1,11 @@
 # 变更记录
 
+## 2026-09-18 · Discord 精确范围过滤
+
+- 增加 `DISCORD_GUILD_ID` 与 `DISCORD_AUTHOR_IDS` 配置。
+- 消息必须同时匹配服务器、频道、发布者，并且发布者不能是 Bot，才会进入留档和解析流程。
+- 真实 Discord ID 仅保存在被 Git 忽略的本机 `.env`，不进入公开仓库。
+
 ## 2026-09-18 · v0.2.0 基础后端
 
 - 增加 Node.js API、SSE、内存仓库和 PostgreSQL 仓库。

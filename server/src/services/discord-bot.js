@@ -21,7 +21,6 @@ function serializeMessage(message) {
 export async function startDiscordBot({ config, repository, onEvent = () => {} }) {
   if (!config.discord.enabled) return null;
 
-  const allowedChannels = new Set(config.discord.channelIds);
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
     partials: [Partials.Channel, Partials.Message]
@@ -29,7 +28,7 @@ export async function startDiscordBot({ config, repository, onEvent = () => {} }
 
   async function record(eventType, incoming) {
     const message = incoming.partial && eventType !== 'delete' ? await incoming.fetch() : incoming;
-    if (!allowedChannels.has(message.channelId) || message.author?.bot) return;
+    if (!isAllowedDiscordMessage(message, config.discord, eventType)) return;
 
     const messageEvent = await repository.recordMessage({ eventType, ...serializeMessage(message) });
     if (eventType !== 'create') {
@@ -58,4 +57,12 @@ export async function startDiscordBot({ config, repository, onEvent = () => {} }
   client.on('messageDelete', (message) => record('delete', message).catch((error) => console.error('Discord delete handler failed', error)));
   await client.login(config.discord.token);
   return client;
+}
+
+export function isAllowedDiscordMessage(message, discordConfig, eventType = 'create') {
+  const scopeMatches = message.guildId === discordConfig.guildId
+    && new Set(discordConfig.channelIds).has(message.channelId);
+  if (!scopeMatches || message.author?.bot) return false;
+  if (eventType === 'delete' && !message.author?.id) return true;
+  return new Set(discordConfig.authorIds).has(message.author?.id);
 }

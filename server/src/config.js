@@ -19,7 +19,9 @@ export function loadConfig() {
     discord: {
       enabled: booleanFromEnv('DISCORD_ENABLED'),
       token: process.env.DISCORD_BOT_TOKEN || '',
-      channelIds: (process.env.DISCORD_CHANNEL_IDS || '').split(',').map((x) => x.trim()).filter(Boolean)
+      guildId: process.env.DISCORD_GUILD_ID || '',
+      channelIds: (process.env.DISCORD_CHANNEL_IDS || '').split(',').map((x) => x.trim()).filter(Boolean),
+      authorIds: (process.env.DISCORD_AUTHOR_IDS || '').split(',').map((x) => x.trim()).filter(Boolean)
     },
     ai: {
       enabled: booleanFromEnv('AI_ENABLED'),
@@ -38,8 +40,8 @@ export function loadConfig() {
 }
 
 export function validateEnabledIntegrations(config) {
-  if (config.discord.enabled && (!config.discord.token || config.discord.channelIds.length === 0)) {
-    throw new Error('DISCORD_ENABLED requires DISCORD_BOT_TOKEN and DISCORD_CHANNEL_IDS');
+  if (config.discord.enabled && (!config.discord.token || !config.discord.guildId || config.discord.channelIds.length === 0 || config.discord.authorIds.length === 0)) {
+    throw new Error('DISCORD_ENABLED requires DISCORD_BOT_TOKEN, DISCORD_GUILD_ID, DISCORD_CHANNEL_IDS and DISCORD_AUTHOR_IDS');
   }
   if (config.ai.enabled && (!config.ai.apiKey || !config.ai.model)) {
     throw new Error('AI_ENABLED requires OPENAI_API_KEY and OPENAI_MODEL');
