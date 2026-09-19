@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#071117">
-  <meta name="description" content="Discord 美股波段消息的一月审计、胜率与模拟跟单工作台">
-  <title>波段信号台 · 一月审计</title>
+  <meta name="description" content="Discord 美股波段消息的有限资金模拟跟单、账户增长曲线与一月审计工作台">
+  <title>波段信号台 · 有限资金跟单</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -13,7 +13,7 @@
   <div class="shell">
     <aside class="rail">
       <a class="logo" href="#top"><i>↗</i><span>波段信号台<small>SWING SIGNAL DESK</small></span></a>
-      <nav><a class="active" href="#overview">总览</a><a href="#quality">数据质量</a><a href="#symbols">标的统计</a><a href="#ledger">操作记录</a><a href="#method">计算口径</a></nav>
+      <nav><a class="active" href="#overview">总览</a><a href="#account">账户曲线</a><a href="#positions">模拟持仓</a><a href="#execution">买卖流水</a><a href="#quality">数据质量</a><a href="#ledger">信号原账</a><a href="#method">计算口径</a></nav>
       <div class="connection"><span class="dot"></span><b id="connectionTitle">正在连接本地后端</b><small id="connectionDetail">检查 PostgreSQL 与长桥</small></div>
     </aside>
 
@@ -24,15 +24,33 @@
       </header>
 
       <section id="overview" class="hero panel">
-        <div><span class="section-tag">PRELIMINARY · 初步自动统计</span><h2>先看清“能确认的交易”，再谈胜率。</h2><p>原始消息完整留档；只有明确写出成本价和卖出价、且非重复转发的交易腿才进入胜率。AI 或规则不确定的内容不会硬猜。</p></div>
-        <div class="hero-score"><span>严格口径胜率</span><strong id="winRate">—</strong><small id="winFormula">等待本地数据</small></div>
+        <div><span class="section-tag">FINITE CAPITAL · 算法跟单回放</span><h2 id="growthHeadline">先用有限资金算清账户，再判断喊单质量。</h2><p>从 100 万美元现金开始，按常规仓分批、单股不超过 12%、总持仓不超过 70%，并计入滑点与费用。找不到本月买入批次的卖单不会凭空补仓。</p></div>
+        <div class="hero-score"><span>跟单账户增长率</span><strong id="accountGrowth">—</strong><small id="growthFormula">等待本地回放</small></div>
       </section>
 
       <section class="kpis" aria-label="月度关键指标">
-        <article class="panel kpi mint"><span>原始消息</span><strong id="rawMessages">—</strong><small>包括昨晚 · 全部入库</small></article>
-        <article class="panel kpi cyan"><span>已完成交易腿</span><strong id="closedLegs">—</strong><small>明确进价 + 出价</small></article>
-        <article class="panel kpi gold"><span>单腿中位收益</span><strong id="medianReturn">—</strong><small>比平均值更抗极端值</small></article>
-        <article class="panel kpi violet"><span>待人工理解</span><strong id="unresolved">—</strong><small>不进入胜率分母</small></article>
+        <article class="panel kpi mint"><span>期末模拟权益</span><strong id="finalEquity">—</strong><small>现金 + 未平仓市值</small></article>
+        <article class="panel kpi cyan"><span>已实现盈亏</span><strong id="realizedPnl">—</strong><small>已卖出且可匹配批次</small></article>
+        <article class="panel kpi gold"><span>严格信号胜率</span><strong id="winRate">—</strong><small id="winFormula">信号层，不等于账户收益</small></article>
+        <article class="panel kpi violet"><span>最大回撤</span><strong id="maxDrawdown">—</strong><small>事件时点权益口径</small></article>
+      </section>
+
+      <section id="account" class="panel account-panel">
+        <div class="panel-head"><div><span class="section-tag">ACCOUNT GROWTH · EVENT TIME</span><h3>账户增长曲线</h3></div><div class="chart-legend"><span><i class="legend-line"></i>模拟权益</span><span><i class="legend-buy"></i>买入</span><span><i class="legend-sell"></i>卖出</span></div></div>
+        <div class="account-layout">
+          <div class="chart-shell">
+            <svg id="equityChart" viewBox="0 0 1000 330" role="img" aria-label="有限资金模拟账户增长曲线"><text x="500" y="165" text-anchor="middle" class="chart-empty">等待账户回放数据</text></svg>
+            <div id="chartTooltip" class="chart-tooltip" hidden></div>
+          </div>
+          <aside class="account-stats">
+            <div><span>未实现盈亏</span><strong id="unrealizedPnl">—</strong></div>
+            <div><span>峰值资金利用率</span><strong id="peakUtilization">—</strong></div>
+            <div><span>模拟买入 / 卖出</span><strong id="fillCounts">—</strong></div>
+            <div><span>无法匹配卖单</span><strong id="unmatchedCount">—</strong></div>
+            <div class="utilization-ring" id="utilizationRing"><b id="cashPct">—</b><small>期末现金占比</small></div>
+          </aside>
+        </div>
+        <p class="footnote">曲线在每条喊单发生时重新估值；两条消息之间沿用该标的最近一次信号价。最后一点用长桥当前报价标记未平仓持仓，因此是可审计估算，不是券商真实成交记录。</p>
       </section>
 
       <section class="grid wide-left">
@@ -47,14 +65,25 @@
         </article>
       </section>
 
+      <section id="positions" class="panel table-panel">
+        <div class="panel-head"><div><span class="section-tag">PAPER POSITIONS</span><h3>当前模拟持仓</h3></div><span class="pill paper">不连接真实券商</span></div>
+        <div class="table-wrap"><table class="compact-table"><thead><tr><th>标的</th><th>股数</th><th>模拟均价</th><th>估值价</th><th>市值</th><th>未实现盈亏</th><th>价格来源</th></tr></thead><tbody id="positionRows"></tbody></table></div>
+      </section>
+
+      <section id="execution" class="panel table-panel">
+        <div class="panel-head"><div><span class="section-tag">FOLLOW LEDGER</span><h3>算法跟单买卖流水</h3></div><div class="filters"><button class="active" data-execution-filter="filled">已模拟</button><button data-execution-filter="buy">买入</button><button data-execution-filter="sell">卖出</button><button data-execution-filter="skipped">跳过</button></div></div>
+        <div class="table-wrap"><table><thead><tr><th>时间</th><th>动作</th><th>标的</th><th>股数</th><th>信号价</th><th>模拟成交价</th><th>费用</th><th>已实现盈亏</th><th>账户权益</th><th>处理结果</th></tr></thead><tbody id="executionRows"></tbody></table></div>
+        <div class="pager"><span id="executionCount">—</span><button id="showMoreExecution">再显示 50 条</button></div>
+      </section>
+
       <section id="quality" class="grid equal">
         <article class="panel">
           <div class="panel-head"><div><span class="section-tag">COVERAGE FUNNEL</span><h3>数据覆盖漏斗</h3></div><span class="pill verified">可追溯</span></div>
           <div id="coverageFunnel" class="funnel"></div>
         </article>
         <article class="panel quality-note">
-          <span class="section-tag">WHAT THIS MEANS</span><h3>高胜率也不等于未来照搬</h3>
-          <ul><li>频道经常分批止盈，天然会产生较多小幅盈利交易腿。</li><li>这是“信号价格理论收益”，未计消息延迟、滑点、费用和资金占用。</li><li>未明确写出买卖配对的内容不算输赢，因此结果可能存在选择偏差。</li></ul>
+          <span class="section-tag">WHAT THIS MEANS</span><h3>账户增长与信号胜率是两件事</h3>
+          <ul><li>严格胜率按明确买卖价的交易腿计算；账户回放还受仓位、现金和持仓重叠影响。</li><li>回放每边计 10 bps 滑点和 2 bps 费用，且从零持仓开始，不把期初遗留卖单当成利润。</li><li>含糊或待复核消息不自动模拟；结果是历史估算，不代表未来收益。</li></ul>
         </article>
       </section>
 
@@ -70,11 +99,11 @@
       </section>
 
       <section id="method" class="grid equal">
-        <article class="panel method"><span class="section-tag">CALCULATION</span><h3>计算口径</h3><code>(卖出价 − 成本价) ÷ 成本价 × 100%</code><p>例如 NVDA 210 买入、220 全部卖出：<b>+4.76%</b>。分批卖出时，每个明确成本批次是一条交易腿；组合总收益需等仓位、成交时间、滑点和现金流水完整后另算。</p></article>
-        <article class="panel method"><span class="section-tag">CAPITAL PLAN</span><h3>有限资金跟单</h3><p>默认模拟本金 $1,000,000，总利用率上限 70%，单标的上限 20%，至少保留 30% 现金。历史月度统计不会假装所有信号都能用无限资金同时成交。</p><div class="capital-bar"><i></i><span>最多部署 70%</span></div></article>
+        <article class="panel method"><span class="section-tag">TWO METRICS</span><h3>两种收益不要混在一起</h3><code>账户增长率 = (期末权益 − 期初资金) ÷ 期初资金</code><p>信号腿仍按“(卖出价 − 成本价) ÷ 成本价”计算，用来观察喊单方向；页面顶部的增长率则来自完整现金、仓位、滑点和费用流水。</p></article>
+        <article class="panel method"><span class="section-tag">CAPITAL PLAN · V1</span><h3>有限资金跟单规则</h3><p>本金 $1,000,000；总仓位上限 70%；单标的上限 12%；常规仓按 6 批拆分，每批约占当时权益 2%。加回优先复用最近卖出数量，否则按一批计算。</p><div class="capital-bar"><i></i><span>最多部署 70% · 至少保留 30% 现金</span></div></article>
       </section>
 
-      <footer><span>原始 Discord 内容只在本机数据库与本地后端展示；公开 GitHub Pages 不携带付费频道数据。</span><span>规则 history-rules-v1</span></footer>
+      <footer><span>原始 Discord 内容和逐笔跟单流水只在本机数据库展示；公开 GitHub Pages 仅保留聚合曲线。</span><span>history-rules-v1 · finite-capital-v1</span></footer>
     </main>
   </div>
   <div id="toast" class="toast" role="status"></div>

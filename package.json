@@ -1,6 +1,6 @@
 {
   "name": "swing-signal-desk",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Discord swing signal recorder, parser and paper-trading workbench",
@@ -11,7 +11,8 @@
     "db:migrate": "node server/scripts/migrate.js",
     "db:verify": "node server/scripts/verify-database.js",
     "db:backup": "node server/scripts/backup-database.js",
-    "db:import-history": "node server/scripts/import-discord-history.js"
+    "db:import-history": "node server/scripts/import-discord-history.js",
+    "db:replay": "node server/scripts/run-portfolio-replay.js"
   },
   "engines": {
     "node": ">=22"

@@ -146,6 +146,69 @@ function buildStrategyReview(importRow, legRows, dailyRows) {
   };
 }
 
+function mapAccountReplay(run, eventRows, snapshotRows, positionRows) {
+  if (!run) return null;
+  return {
+    id: run.id,
+    strategyVersion: run.strategy_version,
+    status: run.status,
+    periodStart: iso(run.period_start),
+    periodEnd: iso(run.period_end),
+    completedAt: iso(run.completed_at),
+    assumptions: run.assumptions || {},
+    summary: {
+      initialCapital: Number(run.initial_capital),
+      finalEquity: Number(run.final_equity),
+      cash: Number(run.cash),
+      marketValue: Number(run.market_value),
+      realizedPnl: Number(run.realized_pnl),
+      unrealizedPnl: Number(run.unrealized_pnl),
+      totalReturnPct: Number(run.total_return_pct),
+      maxDrawdownPct: Number(run.max_drawdown_pct),
+      peakUtilizationPct: Number(run.peak_utilization_pct),
+      ...(run.metrics || {})
+    },
+    curve: snapshotRows.map((row) => ({
+      sequence: Number(row.sequence),
+      occurredAt: iso(row.occurred_at),
+      cash: Number(row.cash),
+      marketValue: Number(row.market_value),
+      equity: Number(row.equity),
+      returnPct: Number(row.return_pct),
+      drawdownPct: Number(row.drawdown_pct),
+      eventSide: row.event_side,
+      eventSymbol: row.event_symbol,
+      markSource: row.mark_source
+    })),
+    events: eventRows.map((row) => ({
+      id: Number(row.id),
+      sequence: Number(row.sequence),
+      occurredAt: iso(row.occurred_at),
+      side: row.side,
+      symbol: row.symbol,
+      quantity: Number(row.quantity),
+      signalPrice: nullableNumber(row.signal_price),
+      fillPrice: nullableNumber(row.fill_price),
+      fees: Number(row.fees),
+      realizedPnl: Number(row.realized_pnl),
+      cashAfter: nullableNumber(row.cash_after),
+      equityAfter: nullableNumber(row.equity_after),
+      utilizationPct: nullableNumber(row.utilization_pct),
+      status: row.status,
+      reason: row.reason
+    })),
+    positions: positionRows.map((row) => ({
+      symbol: row.symbol,
+      quantity: Number(row.quantity),
+      averageCost: Number(row.average_cost),
+      markPrice: Number(row.mark_price),
+      marketValue: Number(row.market_value),
+      unrealizedPnl: Number(row.unrealized_pnl),
+      markSource: row.mark_source
+    }))
+  };
+}
+
 export class PostgresRepository {
   constructor(connectionString) {
     this.pool = new pg.Pool({ connectionString, max: 10, idleTimeoutMillis: 30_000 });
@@ -157,7 +220,7 @@ export class PostgresRepository {
   }
 
   async dashboard() {
-    const [portfolio, positions, messages, signals, audit, historyImport, strategyLegs, dailyActivity] = await Promise.all([
+    const [portfolio, positions, messages, signals, audit, historyImport, strategyLegs, dailyActivity, replayRun] = await Promise.all([
       this.pool.query('select * from portfolios order by created_at limit 1'),
       this.pool.query('select distinct on (symbol) * from position_snapshots order by symbol, captured_at desc'),
       this.pool.query('select * from discord_message_events order by received_at desc limit 50'),
@@ -168,8 +231,15 @@ export class PostgresRepository {
         order by l.occurred_at desc, l.leg_index asc limit 600`),
       this.pool.query(`select to_char(discord_created_at at time zone 'Asia/Shanghai','YYYY-MM-DD') as day, count(*) as message_count
         from discord_message_events where ingestion_mode='historical_backfill'
-        group by 1 order by 1`)
+        group by 1 order by 1`),
+      this.pool.query("select * from strategy_replay_runs where status='completed' order by completed_at desc limit 1")
     ]);
+    const latestRun = replayRun.rows[0];
+    const [replayEvents, replaySnapshots, replayPositions] = latestRun ? await Promise.all([
+      this.pool.query('select * from strategy_replay_events where run_id=$1 order by occurred_at desc, sequence desc', [latestRun.id]),
+      this.pool.query('select * from strategy_replay_snapshots where run_id=$1 order by sequence', [latestRun.id]),
+      this.pool.query('select * from strategy_replay_positions where run_id=$1 order by market_value desc', [latestRun.id])
+    ]) : [{ rows: [] }, { rows: [] }, { rows: [] }];
     const mappedPositions = positions.rows.map(mapPostgresPosition);
     return {
       portfolio: mapPostgresPortfolio(portfolio.rows[0], mappedPositions),
@@ -177,7 +247,8 @@ export class PostgresRepository {
       messages: messages.rows.map(mapPostgresMessage),
       signals: signals.rows.map(mapPostgresSignal),
       audit: audit.rows.map(mapPostgresAudit),
-      strategyReview: buildStrategyReview(historyImport.rows[0], strategyLegs.rows, dailyActivity.rows)
+      strategyReview: buildStrategyReview(historyImport.rows[0], strategyLegs.rows, dailyActivity.rows),
+      accountReplay: mapAccountReplay(latestRun, replayEvents.rows, replaySnapshots.rows, replayPositions.rows)
     };
   }
 

@@ -29,7 +29,7 @@ export class MemoryRepository {
   async health() { return { storage: 'memory', ok: true }; }
   async dashboard() {
     const state = clone(this.state);
-    return { ...state, positions: state.portfolio.positions, strategyReview: null };
+    return { ...state, positions: state.portfolio.positions, strategyReview: null, accountReplay: null };
   }
   async getPortfolio() { return clone(this.state.portfolio); }
 

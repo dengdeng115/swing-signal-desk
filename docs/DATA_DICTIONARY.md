@@ -12,7 +12,13 @@ discord_subscriptions       决定监听范围
         │
         ▼
 discord_message_events      原始消息事件，只追加、不覆盖
-        │
+        ├──────────────► strategy_trade_legs     严格历史操作腿
+        │                         │
+        │                         ▼
+        │                strategy_replay_runs    有限资金回放版本
+        │                         ├──► strategy_replay_events
+        │                         ├──► strategy_replay_snapshots
+        │                         └──► strategy_replay_positions
         ▼
 signal_interpretations      规则或 AI 生成的候选解释
         │
@@ -57,6 +63,10 @@ schema_migrations           记录已经执行过的数据库迁移
 | `discord_message_events` | 一次消息创建、编辑、删除、历史回补或测试事件 | 永久保留 Discord 原始历史 | 已使用 |
 | `discord_history_imports` | 一次 Discord 历史回补批次 | 记录范围、文件哈希、数量和质量指标 | 已使用 |
 | `strategy_trade_legs` | 一条明确买入动作或一个进出价配对交易腿 | 计算信号级理论胜率与收益 | 已使用 |
+| `strategy_replay_runs` | 一次完整的有限资金历史回放 | 保存版本、假设和账户汇总结果 | 已使用 |
+| `strategy_replay_events` | 回放对一条操作腿作出的成交或跳过决定 | 保存股数、成交价、费用、盈亏和原因 | 已使用 |
+| `strategy_replay_snapshots` | 一次信号处理后的账户权益快照 | 绘制账户增长曲线和最大回撤 | 已使用 |
+| `strategy_replay_positions` | 一次回放结束时的一只模拟持仓 | 展示股数、成本、估值和浮盈亏 | 已使用 |
 | `signal_interpretations` | 一次解析结果 | 保存规则或 AI 对消息的候选理解 | 已使用 |
 | `review_decisions` | 一次人工审核动作 | 保存确认、忽略、拒绝或修改 | 已使用 |
 | `market_quotes` | 某股票在某时点的一条行情 | 区分行情时间和系统收到时间 | 等待长桥接入 |
@@ -66,7 +76,7 @@ schema_migrations           记录已经执行过的数据库迁移
 | `audit_events` | 一次关键系统或人工行为 | 追踪安全修正、配置变化和异常 | 已使用 |
 | `schema_migrations` | 一个已执行的迁移文件 | 防止重复建表或漏执行升级 | 已使用 |
 
-部分表现在为空是正常的：网页已能临时读取长桥报价，但尚未把行情定时落入 `market_quotes`；完整模拟成交模块也未启用，因此 `market_quotes`、`paper_orders`、`paper_fills`、`position_snapshots` 可能没有记录。
+部分表现在为空是正常的：历史回放使用独立的 `strategy_replay_*` 表，不等同于经过人工确认的前向模拟订单。因此 `market_quotes`、`paper_orders`、`paper_fills`、`position_snapshots` 仍可能没有记录。
 
 ## 4. `portfolios`：模拟组合
 
@@ -157,6 +167,79 @@ schema_migrations           记录已经执行过的数据库迁移
 | `occurred_at` | Discord 原消息发生时间 |
 
 当前月度胜率定义为：`wins / (wins + losses + flats)`。持平也进入分母。该指标是信号级理论胜率，不等于组合收益率，也不等于未来盈利概率。
+
+## 6C. `strategy_replay_runs`：有限资金回放版本
+
+一行代表一次完整历史账户回放。每次 `npm run db:replay` 都追加新版本，旧结果不覆盖，便于日后比较规则变化。
+
+| 字段 | 类型 | 是否必填 | 含义 |
+|---|---|---:|---|
+| `id` | `uuid` | 是 | 回放唯一编号 |
+| `history_import_id` | `uuid` | 是 | 使用的历史回补批次 |
+| `strategy_version` | `text` | 是 | 仓位与成交规则版本；当前为 `finite-capital-v1` |
+| `status` | `text` | 是 | `running`、`completed` 或 `failed` |
+| `period_start` / `period_end` | `timestamptz` | 是 | 回放覆盖的消息时间范围 |
+| `initial_capital` | `numeric(20,6)` | 是 | 回放起始现金 |
+| `final_equity` | `numeric(20,6)` | 否 | 期末现金加持仓市值 |
+| `cash` | `numeric(20,6)` | 否 | 期末未使用现金 |
+| `market_value` | `numeric(20,6)` | 否 | 期末模拟持仓总市值 |
+| `realized_pnl` | `numeric(20,6)` | 否 | 已卖出匹配批次的累计盈亏，含模型费用 |
+| `unrealized_pnl` | `numeric(20,6)` | 否 | 期末仍持有批次的浮动盈亏 |
+| `total_return_pct` | `numeric(20,8)` | 否 | `(final_equity / initial_capital - 1) × 100` |
+| `max_drawdown_pct` | `numeric(20,8)` | 否 | 事件时点权益相对此前峰值的最大跌幅 |
+| `peak_utilization_pct` | `numeric(20,8)` | 否 | 回放中实际最高持仓市值/权益；价格上涨后可略高于买入时上限 |
+| `assumptions` | `jsonb` | 是 | 资金、仓位、滑点、费用、去重和匹配容差的完整快照 |
+| `metrics` | `jsonb` | 是 | 成交数、跳过数、费用和报价成功数等扩展指标 |
+| `created_at` / `completed_at` | `timestamptz` | 是/否 | 回放创建与完成时间 |
+
+## 6D. `strategy_replay_events`：逐笔回放处理
+
+一行代表回放引擎对一个策略操作腿的处理。即使没有成交，跳过原因也要保存。
+
+| 字段 | 类型 | 是否必填 | 含义 |
+|---|---|---:|---|
+| `id` | `bigserial` | 是 | 递增流水号 |
+| `run_id` / `sequence` | `uuid` / `integer` | 是 | 所属回放版本和处理顺序 |
+| `trade_leg_id` | `uuid` | 否 | 来源策略操作腿 |
+| `message_event_id` | `uuid` | 否 | 可追溯的 Discord 原始事件 |
+| `occurred_at` | `timestamptz` | 是 | 喊单时间 |
+| `side` | `text` | 是 | `buy`、`sell` 或 `skipped` |
+| `symbol` | `text` | 是 | 股票代码 |
+| `quantity` | `numeric(20,6)` | 是 | 模拟成交股数；跳过时为 0 |
+| `signal_price` | `numeric(20,6)` | 否 | 频道明确给出的价格 |
+| `fill_price` | `numeric(20,6)` | 否 | 计入滑点后的模拟成交价 |
+| `fees` | `numeric(20,6)` | 是 | 本笔模型费用 |
+| `realized_pnl` | `numeric(20,6)` | 是 | 本笔卖出实现盈亏；买入和跳过为 0 |
+| `cash_after` / `equity_after` | `numeric(20,6)` | 否 | 处理后的账户现金与权益 |
+| `utilization_pct` | `numeric(20,8)` | 否 | 处理后的资金利用率 |
+| `status` | `text` | 是 | `filled`、`skipped_unmatched`、`skipped_review` 或 `skipped_risk` |
+| `reason` | `text` | 否 | 仓位来源、卖出比例或跳过原因 |
+
+## 6E. `strategy_replay_snapshots`：账户曲线快照
+
+| 字段 | 类型 | 是否必填 | 含义 |
+|---|---|---:|---|
+| `run_id` / `sequence` | `uuid` / `integer` | 是 | 所属回放和曲线顺序 |
+| `occurred_at` | `timestamptz` | 是 | 对应信号或期末估值时间 |
+| `cash` / `market_value` / `equity` | `numeric(20,6)` | 是 | 现金、持仓市值和两者之和 |
+| `return_pct` | `numeric(20,8)` | 是 | 相对期初资金的账户增长率 |
+| `drawdown_pct` | `numeric(20,8)` | 是 | 相对此前最高权益的回撤 |
+| `event_side` / `event_symbol` | `text` | 否 | 曲线上买卖标记的动作与股票 |
+| `mark_source` | `text` | 否 | 期末点为 `longbridge`，普通事件点为空 |
+
+事件间没有连续市场行情时，未被新消息提到的股票沿用最近一次信号价。因此曲线是“事件时点估值”，不是逐分钟或日收盘净值。
+
+## 6F. `strategy_replay_positions`：期末模拟持仓
+
+| 字段 | 类型 | 是否必填 | 含义 |
+|---|---|---:|---|
+| `run_id` / `symbol` | `uuid` / `text` | 是 | 所属回放和股票；两者组合唯一 |
+| `quantity` | `numeric(20,6)` | 是 | 期末模拟股数 |
+| `average_cost` | `numeric(20,6)` | 是 | 含买入费用的加权模拟成本 |
+| `mark_price` | `numeric(20,6)` | 是 | 期末估值价 |
+| `market_value` | `numeric(20,6)` | 是 | `quantity × mark_price` |
+| `unrealized_pnl` | `numeric(20,6)` | 是 | 市值减剩余成本 |
+| `mark_source` | `text` | 是 | `longbridge` 或 `last_signal` |
 
 ## 7. `signal_interpretations`：候选信号解析
 
@@ -526,6 +609,52 @@ left join paper_fills f
 order by o.created_at desc, f.filled_at desc;
 ```
 
+### 查看最新有限资金回放和逐笔流水
+
+```sql
+with latest as (
+  select id
+  from strategy_replay_runs
+  where status = 'completed'
+  order by completed_at desc
+  limit 1
+)
+select e.occurred_at,
+       e.side,
+       e.symbol,
+       e.quantity,
+       e.signal_price,
+       e.fill_price,
+       e.fees,
+       e.realized_pnl,
+       e.equity_after,
+       e.status,
+       e.reason
+from strategy_replay_events e
+join latest on latest.id = e.run_id
+order by e.sequence desc;
+```
+
+### 查看最新回放的账户增长率
+
+```sql
+select completed_at,
+       strategy_version,
+       initial_capital,
+       final_equity,
+       total_return_pct,
+       realized_pnl,
+       unrealized_pnl,
+       max_drawdown_pct,
+       peak_utilization_pct,
+       assumptions,
+       metrics
+from strategy_replay_runs
+where status = 'completed'
+order by completed_at desc
+limit 1;
+```
+
 ### 查看最近审计记录
 
 ```sql
@@ -547,6 +676,12 @@ limit 100;
 select 'portfolios' as table_name, count(*) as row_count from portfolios
 union all select 'discord_subscriptions', count(*) from discord_subscriptions
 union all select 'discord_message_events', count(*) from discord_message_events
+union all select 'discord_history_imports', count(*) from discord_history_imports
+union all select 'strategy_trade_legs', count(*) from strategy_trade_legs
+union all select 'strategy_replay_runs', count(*) from strategy_replay_runs
+union all select 'strategy_replay_events', count(*) from strategy_replay_events
+union all select 'strategy_replay_snapshots', count(*) from strategy_replay_snapshots
+union all select 'strategy_replay_positions', count(*) from strategy_replay_positions
 union all select 'signal_interpretations', count(*) from signal_interpretations
 union all select 'review_decisions', count(*) from review_decisions
 union all select 'market_quotes', count(*) from market_quotes
@@ -566,10 +701,12 @@ order by table_name;
 4. 一条 Discord 消息可能对应多条事件和多个解析版本，不能只取任意一行。
 5. 删除消息不会从数据库抹掉原文；系统追加 `delete` 事件用于审计。
 6. `position_snapshots` 是历史快照，查看当前仓位要取每只股票最新一条。
-7. 空的行情、订单、成交和持仓表不代表故障；当前这些模块还在路线图中。
-8. GitHub Pages 是静态演示，不会公开本机 PostgreSQL 数据。
-9. `jsonb` 中的原始载荷可能含频道文字，数据库备份不得上传公开 GitHub。
-10. Navicat 日常只使用只读账号；遇到 `25006` 表示写入被正确阻止。
+7. `strategy_replay_positions` 是历史回放结果，不等于经过人工确认的前向 `position_snapshots`。
+8. 回放的 70% 是下单时上限；持仓上涨后 `peak_utilization_pct` 可能略高于 70%，不等于当时违规买入。
+9. 空的前向行情、订单、成交和持仓表不代表故障；这些模块还在路线图中。
+10. GitHub Pages 只带聚合回放快照，不会公开本机 PostgreSQL、逐笔流水或频道原文。
+11. `jsonb` 中的原始载荷可能含频道文字，数据库备份不得上传公开 GitHub。
+12. Navicat 日常只使用只读账号；遇到 `25006` 表示写入被正确阻止。
 
 ## 20. 维护规则
 

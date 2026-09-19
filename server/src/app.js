@@ -21,7 +21,7 @@ export function createApp({ config, repository, quoteService = null }) {
 
   app.get('/api/health', async (_request, response, next) => {
     try {
-      response.json({ ok: true, version: '0.3.0', integrations: { discord: config.discord.enabled, ai: config.ai.enabled }, ...(await repository.health()) });
+      response.json({ ok: true, version: '0.4.0', integrations: { discord: config.discord.enabled, ai: config.ai.enabled }, ...(await repository.health()) });
     } catch (error) { next(error); }
   });
 
