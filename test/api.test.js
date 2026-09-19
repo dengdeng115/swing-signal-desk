@@ -21,8 +21,23 @@ const config = {
 test('health reports memory storage and disabled integrations', async () => {
   const response = await request(createApp({ config, repository: new MemoryRepository() })).get('/api/health');
   assert.equal(response.status, 200);
+  assert.equal(response.body.version, '0.6.0');
   assert.equal(response.body.storage, 'memory');
   assert.equal(response.body.integrations.discord, false);
+});
+
+test('desktop web app assets are available', async () => {
+  const app = createApp({ config, repository: new MemoryRepository() });
+  const [manifest, worker, icon] = await Promise.all([
+    request(app).get('/manifest.webmanifest'),
+    request(app).get('/service-worker.js'),
+    request(app).get('/icon.svg')
+  ]);
+  assert.equal(manifest.status, 200);
+  assert.equal(manifest.body.display, 'standalone');
+  assert.equal(worker.status, 200);
+  assert.match(worker.text, /swing-signal-desk-v060/);
+  assert.equal(icon.status, 200);
 });
 
 test('manual parse creates an auditable candidate', async () => {

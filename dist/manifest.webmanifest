@@ -1,0 +1,20 @@
+{
+  "id": "./",
+  "name": "波段信号台",
+  "short_name": "波段信号台",
+  "description": "Discord 美股波段信号记录、有限资金模拟跟单与收益复盘",
+  "lang": "zh-CN",
+  "start_url": "./#overview",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#061016",
+  "theme_color": "#071117",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

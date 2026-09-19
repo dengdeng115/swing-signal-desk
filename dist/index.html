@@ -5,7 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#071117">
   <meta name="description" content="Discord 美股波段消息的有限资金模拟跟单、账户增长曲线与一月审计工作台">
+  <meta name="application-name" content="波段信号台">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>波段信号台 · 实时跟单总览</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -20,7 +25,7 @@
     <main id="top">
       <header class="topbar">
         <div><p class="eyebrow">MIDO · LIVE PAPER FOLLOW DESK</p><h1>咪哆波段 · 跟单总览</h1><p id="periodText" class="sub">正在读取时间范围…</p></div>
-        <div class="header-actions"><span class="pill live-pill"><i></i>实时监听</span><span class="pill paper">PAPER ONLY</span><button id="refreshButton">扫描并刷新</button></div>
+        <div class="header-actions"><span class="pill live-pill"><i></i>实时监听</span><span class="pill paper">PAPER ONLY</span><button id="installApp" hidden>安装桌面版</button><button id="refreshButton">扫描并刷新</button></div>
       </header>
 
       <section id="overview" class="hero panel">
@@ -131,9 +136,10 @@
         <article class="panel method"><span class="section-tag">CAPITAL PLAN · V1</span><h3>有限资金跟单规则</h3><p>本金 $1,000,000；总仓位上限 70%；单标的上限 12%；常规仓按 6 批拆分，每批约占当时权益 2%。加回优先复用最近卖出数量，否则按一批计算。</p><div class="capital-bar"><i></i><span>最多部署 70% · 至少保留 30% 现金</span></div></article>
       </section>
 
-      <footer><span>本机：Discord 网关秒级接收 + 每 60 秒补漏 + 页面事件流刷新；公开页只显示脱敏快照。</span><span>history-rules-v1 · finite-capital-v1 · v0.5.0</span></footer>
+      <footer><span>本机：Discord 网关秒级接收 + 每 60 秒补漏 + 页面事件流刷新；公开页只显示脱敏快照。</span><span>history-rules-v1 · finite-capital-v1 · v0.6.0</span></footer>
     </main>
   </div>
+  <button id="backToTop" class="back-to-top" aria-label="回到页面顶部" title="回到顶部">↑<span>顶部</span></button>
   <div id="toast" class="toast" role="status"></div>
   <script src="app.js"></script>
 </body>

@@ -21,7 +21,7 @@ export function createApp({ config, repository, quoteService = null }) {
 
   app.get('/api/health', async (_request, response, next) => {
     try {
-      response.json({ ok: true, version: '0.5.0', integrations: { discord: config.discord.enabled, ai: config.ai.enabled }, runtime: app.locals.integrationStatus?.() || null, ...(await repository.health()) });
+      response.json({ ok: true, version: '0.6.0', integrations: { discord: config.discord.enabled, ai: config.ai.enabled }, runtime: app.locals.integrationStatus?.() || null, ...(await repository.health()) });
     } catch (error) { next(error); }
   });
 

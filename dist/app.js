@@ -343,6 +343,10 @@ async function loadDashboard({ quiet = false } = {}) {
     if (!quiet) toast('当前显示公开聚合回放；逐笔买卖与频道原文未公开。');
   } finally {
     state.loading = false;
+    if (!state.hashRestored && window.location.hash) {
+      state.hashRestored = true;
+      window.requestAnimationFrame(() => document.querySelector(window.location.hash)?.scrollIntoView({ block: 'start' }));
+    }
   }
 }
 
@@ -362,5 +366,61 @@ $('#symbolTable thead').addEventListener('click', (event) => { const th = event.
 $('#ledgerRows').addEventListener('click', (event) => { const button = event.target.closest('[data-message]'); if (button) toast(button.dataset.message); });
 $('#equityChart').addEventListener('mousemove', handleChartMove);
 $('#equityChart').addEventListener('mouseleave', () => { $('#chartCursor')?.setAttribute('visibility', 'hidden'); $('#chartCursorPoint')?.setAttribute('visibility', 'hidden'); $('#chartTooltip').hidden = true; });
-document.querySelectorAll('.rail nav a').forEach((link) => link.addEventListener('click', () => { document.querySelectorAll('.rail nav a').forEach((item) => item.classList.remove('active')); link.classList.add('active'); }));
+const navLinks = [...document.querySelectorAll('.rail nav a')];
+function setActiveNavigation(id) {
+  navLinks.forEach((link) => {
+    const active = link.getAttribute('href') === `#${id}`;
+    link.classList.toggle('active', active);
+    if (active) {
+      link.setAttribute('aria-current', 'location');
+      link.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    } else link.removeAttribute('aria-current');
+  });
+}
+navLinks.forEach((link) => link.addEventListener('click', () => setActiveNavigation(link.hash.slice(1))));
+
+const observedSections = navLinks.map((link) => document.querySelector(link.hash)).filter(Boolean);
+const backToTop = $('#backToTop');
+function updateScrollNavigation() {
+  const atPageEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+  const lastSection = observedSections.at(-1);
+  const lastSectionIsReading = lastSection && lastSection.getBoundingClientRect().top <= window.innerHeight * 0.72;
+  let current = observedSections[0];
+  if (atPageEnd || lastSectionIsReading) current = lastSection;
+  else {
+    const readingLine = window.innerHeight * 0.28;
+    observedSections.forEach((section) => {
+      if (section.getBoundingClientRect().top <= readingLine) current = section;
+    });
+  }
+  if (current) setActiveNavigation(current.id);
+  backToTop.classList.toggle('visible', window.scrollY > 650);
+}
+let navigationFrame = null;
+function queueScrollNavigation() {
+  if (navigationFrame) return;
+  navigationFrame = window.requestAnimationFrame(() => {
+    navigationFrame = null;
+    updateScrollNavigation();
+  });
+}
+window.addEventListener('scroll', queueScrollNavigation, { passive: true });
+window.addEventListener('resize', queueScrollNavigation, { passive: true });
+updateScrollNavigation();
+backToTop.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+
+let installPrompt = null;
+const installAppButton = $('#installApp');
+window.addEventListener('beforeinstallprompt', (event) => {
+  event.preventDefault(); installPrompt = event; installAppButton.hidden = false;
+});
+installAppButton.addEventListener('click', async () => {
+  if (!installPrompt) return;
+  installPrompt.prompt();
+  const choice = await installPrompt.userChoice;
+  installPrompt = null; installAppButton.hidden = true;
+  if (choice.outcome === 'accepted') toast('桌面版已安装。');
+});
+window.addEventListener('appinstalled', () => { installPrompt = null; installAppButton.hidden = true; toast('波段信号台已安装为桌面应用。'); });
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => {}));
 loadDashboard();

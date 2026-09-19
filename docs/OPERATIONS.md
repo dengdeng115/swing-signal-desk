@@ -21,6 +21,16 @@ npm run service:status
 
 任务名为 `Swing Signal Desk`，在当前 Windows 用户登录时以隐藏窗口启动 `scripts/start-local.ps1`。任务文件不保存 Token 或数据库密码，服务仍从项目目录下被 Git 忽略的 `.env` 读取。安装任务不会立即启动第二个实例；当前已有服务时继续使用当前进程，下次登录自动接管。
 
+### 桌面 App 入口
+
+```powershell
+npm run desktop:install
+```
+
+该命令在当前用户桌面创建“波段信号台”快捷方式。双击后，`scripts/launch-app.ps1` 会先检查 `http://localhost:8787/api/health`；若后端未运行，则以隐藏窗口启动服务，最多等待约 10 秒，然后优先使用 Edge、其次 Chrome 的 `--app` 独立窗口打开仪表盘。它不是 Electron，不复制数据库和密钥，更新代码后无需重新打包 App。
+
+网页同时提供 Web App Manifest 与 Service Worker。在支持 PWA 的 Edge/Chrome 中出现“安装桌面版”按钮时也可安装；Service Worker 只缓存同源静态外壳，不缓存 `/api/` 数据，实时数据始终从本机后端读取。
+
 ## PostgreSQL 初始化
 
 本机 PostgreSQL 已完成初始化。详细的角色、Navicat、迁移、验证和故障排查见 `docs/POSTGRES_SETUP.md`。不要把密码发到聊天或提交到 GitHub。
