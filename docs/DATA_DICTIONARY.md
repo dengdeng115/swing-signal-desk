@@ -95,13 +95,13 @@ schema_migrations           记录已经执行过的数据库迁移
 | `id` | `uuid` | 是 | 订阅唯一编号 |
 | `guild_id` | `text` | 是 | Discord 服务器 ID；`guild` 就是服务器 |
 | `channel_id` | `text` | 是 | Discord 频道 ID |
-| `author_id` | `text` | 否 | 指定发布者 ID；为空表示监听该频道内所有非 Bot 用户 |
+| `author_id` | `text` | 否 | 指定发布者 ID；为空表示监听该频道内所有非 Bot 用户。转发 Bot 必须明确填写其用户 ID |
 | `label` | `text` | 否 | 方便人看的备注名称，不参与权限判断 |
 | `enabled` | `boolean` | 是 | 是否启用；关闭时设为 `false`，不要删除历史消息 |
 | `created_at` | `timestamptz` | 是 | 订阅创建时间 |
 | `updated_at` | `timestamptz` | 是 | 订阅最近修改时间 |
 
-唯一约束会阻止同一个服务器、频道和发布者被重复添加。Bot 仍必须真实加入服务器并拥有目标频道的 View Channel 与 Read Message History 权限；数据库里有订阅不等于 Discord 已授权。
+唯一约束会阻止同一个服务器、频道和发布者被重复添加。Bot 仍必须真实加入服务器并拥有目标频道的 View Channel 与 Read Message History 权限；数据库里有订阅不等于 Discord 已授权。为避免 Bot 循环和噪声，频道通配订阅只接收真人；由转发 Bot 发布的信号必须精确配置该 Bot 的 `author_id`，采集器自身消息始终被拒绝。
 
 ## 6. `discord_message_events`：Discord 原始事件
 

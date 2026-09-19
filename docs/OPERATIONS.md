@@ -38,7 +38,7 @@ npm start
 5. 在 Developer Portal 创建或重置 Token，由用户本人直接写入本机/服务器的 `DISCORD_BOT_TOKEN`。不要把 Token 发到聊天或提交 Git。
 6. 把订阅列表写入 `DISCORD_SUBSCRIPTIONS_JSON`，然后设置 `DISCORD_ENABLED=true`。
 
-`DISCORD_SUBSCRIPTIONS_JSON` 中每项包含 `guildId`、`channelId` 和 `authorIds`；`authorIds` 可包含多人，空数组表示监听该频道全部非 Bot 发布者。采集器逐条匹配订阅，不会把不同频道和作者交叉组合。
+`DISCORD_SUBSCRIPTIONS_JSON` 中每项包含 `guildId`、`channelId` 和 `authorIds`；`authorIds` 可包含多人，空数组表示监听该频道全部非 Bot 发布者。若频道消息由转发 Bot 发布，只有把该 Bot 的准确用户 ID 明确写入 `authorIds` 才会接收；通配订阅不会接收 Bot，采集器也永远忽略自身消息。采集器逐条匹配订阅，不会把不同频道和作者交叉组合。
 
 首次启用后先在测试频道发送一条新消息，再编辑并删除；逐条核对原文、编辑记录、接收延迟和解析结果。确认无误后才切换到正式频道。
 

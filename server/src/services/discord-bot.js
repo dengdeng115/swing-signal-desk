@@ -28,7 +28,7 @@ export async function startDiscordBot({ config, repository, onEvent = () => {} }
 
   async function record(eventType, incoming) {
     const message = incoming.partial && eventType !== 'delete' ? await incoming.fetch() : incoming;
-    if (!isAllowedDiscordMessage(message, config.discord, eventType)) return;
+    if (!isAllowedDiscordMessage(message, config.discord, eventType, client.user?.id)) return;
 
     const messageEvent = await repository.recordMessage({ eventType, ...serializeMessage(message) });
     if (eventType !== 'create') {
@@ -59,11 +59,23 @@ export async function startDiscordBot({ config, repository, onEvent = () => {} }
   return client;
 }
 
-export function isAllowedDiscordMessage(message, discordConfig, eventType = 'create') {
-  if (message.author?.bot) return false;
+export function isAllowedDiscordMessage(message, discordConfig, eventType = 'create', currentBotUserId = null) {
   const subscriptions = discordConfig.subscriptions || [];
   const matchingScope = subscriptions.find((item) => item.guildId === message.guildId && item.channelId === message.channelId);
   if (!matchingScope) return false;
   if (eventType === 'delete' && !message.author?.id) return true;
-  return matchingScope.authorIds.length === 0 || matchingScope.authorIds.includes(message.author?.id);
+
+  const authorId = message.author?.id;
+  if (!authorId) return false;
+  const isExplicitAuthor = matchingScope.authorIds.includes(authorId);
+
+  // Some signal channels are relayed by a Discord Bot. Accept those messages
+  // only when that exact Bot user ID is explicitly allowlisted. Wildcard
+  // channel subscriptions remain human-only, and the collector never ingests
+  // its own messages.
+  if (message.author?.bot) {
+    return authorId !== currentBotUserId && matchingScope.authorIds.length > 0 && isExplicitAuthor;
+  }
+
+  return matchingScope.authorIds.length === 0 || isExplicitAuthor;
 }
