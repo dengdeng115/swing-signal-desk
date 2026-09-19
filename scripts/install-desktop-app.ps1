@@ -19,8 +19,17 @@ $browser = $browserCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $
 
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut($shortcutPath)
-$shortcut.TargetPath = $powershell
-$shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$launcher`""
+$opens = 'Standalone browser app window'
+if ($browser) {
+  # A direct browser shortcut is less likely to be quarantined than a desktop
+  # shortcut whose target is PowerShell. The logon task owns backend startup.
+  $shortcut.TargetPath = $browser
+  $shortcut.Arguments = '--app=http://localhost:8787/#overview --start-maximized'
+} else {
+  $shortcut.TargetPath = $powershell
+  $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$launcher`""
+  $opens = 'Default browser through the fallback launcher'
+}
 $shortcut.WorkingDirectory = $projectRoot
 $shortcut.Description = 'Open the local Swing Signal Desk live dashboard'
 if ($browser) { $shortcut.IconLocation = "$browser,0" }
@@ -29,6 +38,6 @@ $shortcut.Save()
 [pscustomobject]@{
   Name = $displayName
   Shortcut = $shortcutPath
-  Opens = 'Standalone browser app window'
-  StartsBackendIfNeeded = $true
+  Opens = $opens
+  BackendStartup = 'Windows logon task; npm run desktop:open is the fallback launcher'
 }

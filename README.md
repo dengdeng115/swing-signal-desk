@@ -53,7 +53,7 @@ npm run desktop:install
 npm run desktop:open
 ```
 
-桌面快捷方式会先检查本机后端；若服务未运行，会在后台启动并等待健康检查通过，再用 Edge 或 Chrome 的独立 App 窗口打开。
+桌面快捷方式直接用 Edge 或 Chrome 的独立 App 窗口打开，避免 Windows 清理脚本型快捷方式；后端由登录自启任务维护。若服务被手动关闭，可运行 `npm run desktop:open`，它会先做健康检查并在后台启动服务。
 
 ```powershell
 npm test
