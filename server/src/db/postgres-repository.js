@@ -87,6 +87,65 @@ function mapPostgresAudit(row) {
   };
 }
 
+function buildStrategyReview(importRow, legRows, dailyRows) {
+  if (!importRow) return null;
+  const included = legRows.filter((row) => row.analysis_included);
+  const bySymbolMap = new Map();
+  for (const row of included) {
+    const item = bySymbolMap.get(row.symbol) || { symbol: row.symbol, closedLegs: 0, wins: 0, losses: 0, flats: 0, returns: [] };
+    item.closedLegs += 1;
+    if (row.outcome === 'win') item.wins += 1;
+    if (row.outcome === 'loss') item.losses += 1;
+    if (row.outcome === 'flat') item.flats += 1;
+    item.returns.push(Number(row.gross_return_pct));
+    bySymbolMap.set(row.symbol, item);
+  }
+  const bySymbol = [...bySymbolMap.values()].map((item) => ({
+    symbol: item.symbol,
+    closedLegs: item.closedLegs,
+    wins: item.wins,
+    losses: item.losses,
+    flats: item.flats,
+    winRatePct: Number((item.wins / item.closedLegs * 100).toFixed(2)),
+    averageReturnPct: Number((item.returns.reduce((sum, value) => sum + value, 0) / item.returns.length).toFixed(4))
+  })).sort((a, b) => b.closedLegs - a.closedLegs || b.winRatePct - a.winRatePct);
+
+  return {
+    mode: 'historical_backfill',
+    importId: importRow.id,
+    periodStart: iso(importRow.period_start),
+    periodEnd: iso(importRow.period_end),
+    completedAt: iso(importRow.completed_at),
+    metrics: importRow.details || {},
+    coverage: {
+      rawMessages: Number(importRow.fetched_count),
+      parsedEvents: Number(importRow.details?.parsedEvents || 0),
+      includedClosedLegs: included.length,
+      unresolvedTradeLike: Number(importRow.details?.tradeLikeUnresolved || 0),
+      duplicatesExcluded: Number(importRow.details?.duplicateEvents || 0),
+      needsReview: Number(importRow.details?.needsReview || 0)
+    },
+    bySymbol,
+    dailyActivity: dailyRows.map((row) => ({ date: row.day, messages: Number(row.message_count) })),
+    legs: legRows.map((row) => ({
+      id: row.id,
+      occurredAt: iso(row.occurred_at),
+      action: row.action,
+      symbol: row.symbol,
+      entryPrice: Number(row.entry_price),
+      exitPrice: nullableNumber(row.exit_price),
+      positionFraction: nullableNumber(row.position_fraction),
+      closedLeg: row.is_closed_leg,
+      returnPct: nullableNumber(row.gross_return_pct),
+      outcome: row.outcome,
+      confidence: Number(row.confidence),
+      reviewStatus: row.review_status,
+      analysisIncluded: row.analysis_included,
+      content: row.content
+    }))
+  };
+}
+
 export class PostgresRepository {
   constructor(connectionString) {
     this.pool = new pg.Pool({ connectionString, max: 10, idleTimeoutMillis: 30_000 });
@@ -98,12 +157,18 @@ export class PostgresRepository {
   }
 
   async dashboard() {
-    const [portfolio, positions, messages, signals, audit] = await Promise.all([
+    const [portfolio, positions, messages, signals, audit, historyImport, strategyLegs, dailyActivity] = await Promise.all([
       this.pool.query('select * from portfolios order by created_at limit 1'),
       this.pool.query('select distinct on (symbol) * from position_snapshots order by symbol, captured_at desc'),
       this.pool.query('select * from discord_message_events order by received_at desc limit 50'),
       this.pool.query('select * from signal_interpretations order by created_at desc limit 50'),
-      this.pool.query('select * from audit_events order by created_at desc limit 50')
+      this.pool.query('select * from audit_events order by created_at desc limit 50'),
+      this.pool.query("select * from discord_history_imports where status='completed' order by completed_at desc limit 1"),
+      this.pool.query(`select l.*, m.content from strategy_trade_legs l join discord_message_events m on m.id=l.message_event_id
+        order by l.occurred_at desc, l.leg_index asc limit 600`),
+      this.pool.query(`select to_char(discord_created_at at time zone 'Asia/Shanghai','YYYY-MM-DD') as day, count(*) as message_count
+        from discord_message_events where ingestion_mode='historical_backfill'
+        group by 1 order by 1`)
     ]);
     const mappedPositions = positions.rows.map(mapPostgresPosition);
     return {
@@ -111,7 +176,8 @@ export class PostgresRepository {
       positions: mappedPositions,
       messages: messages.rows.map(mapPostgresMessage),
       signals: signals.rows.map(mapPostgresSignal),
-      audit: audit.rows.map(mapPostgresAudit)
+      audit: audit.rows.map(mapPostgresAudit),
+      strategyReview: buildStrategyReview(historyImport.rows[0], strategyLegs.rows, dailyActivity.rows)
     };
   }
 

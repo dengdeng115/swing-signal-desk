@@ -1,5 +1,6 @@
 import { loadConfig, validateEnabledIntegrations } from './config.js';
 import { createApp } from './app.js';
+import { LongbridgeQuoteService } from './services/longbridge-quotes.js';
 import { MemoryRepository } from './db/memory-repository.js';
 import { PostgresRepository } from './db/postgres-repository.js';
 import { startDiscordBot } from './services/discord-bot.js';
@@ -9,7 +10,7 @@ validateEnabledIntegrations(config);
 const repository = config.databaseUrl
   ? new PostgresRepository(config.databaseUrl)
   : new MemoryRepository(config.risk.initialCapital);
-const app = createApp({ config, repository });
+const app = createApp({ config, repository, quoteService: new LongbridgeQuoteService() });
 const server = app.listen(config.port, () => {
   console.log(`Swing Signal Desk listening on http://localhost:${config.port}`);
   console.log(`Storage: ${config.databaseUrl ? 'PostgreSQL' : 'memory demo'}`);

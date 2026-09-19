@@ -1,114 +1,115 @@
-const baseCapital = 1_000_000;
-let capital = baseCapital;
-let streamOn = true;
-let signalCursor = 3;
+const state = { review: null, filter: 'all', visible: 50, sort: ['closedLegs', 'desc'] };
+const PUBLIC_SNAPSHOT = {
+  mode: 'public_aggregate_snapshot', periodStart: '2026-08-18T16:00:00.000Z', periodEnd: '2026-09-19T05:26:36.357Z',
+  metrics: { rawMessages: 629, parsedEvents: 425, closedLegs: 229, wins: 211, losses: 12, flats: 6, winRatePct: 92.14, medianReturnPct: 2.8425, tradeLikeUnresolved: 67 },
+  coverage: { rawMessages: 629, parsedEvents: 425, includedClosedLegs: 229, unresolvedTradeLike: 67, duplicatesExcluded: 40, needsReview: 7 },
+  dailyActivity: [['08-19',34],['08-20',31],['08-21',35],['08-24',16],['08-25',20],['08-26',16],['08-27',23],['08-28',14],['08-29',7],['08-31',5],['09-01',21],['09-02',25],['09-03',57],['09-04',27],['09-08',62],['09-09',12],['09-10',39],['09-11',29],['09-14',46],['09-15',6],['09-16',18],['09-17',76],['09-18',10]].map(([date,messages]) => ({ date: `2026-${date}`, messages })),
+  bySymbol: [], legs: []
+};
+const $ = (selector) => document.querySelector(selector);
+const number = (value, digits = 0) => new Intl.NumberFormat('zh-CN', { maximumFractionDigits: digits, minimumFractionDigits: digits }).format(value);
+const pct = (value, digits = 2) => value == null ? '—' : `${value >= 0 ? '+' : ''}${number(value, digits)}%`;
+const money = (value) => value == null ? '—' : `$${number(value, 2)}`;
+const dateTime = (value) => new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 
-const positions = [
-  { symbol: 'NVDA', shares: 900, avg: 207.87, price: 220.00 },
-  { symbol: 'TSLA', shares: 420, avg: 416.95, price: 432.00 },
-  { symbol: 'AMD', shares: 430, avg: 202.00, price: 199.00 }
-];
+function toast(text) { const el = $('#toast'); el.textContent = text; el.classList.add('show'); clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove('show'), 2600); }
 
-const signals = [
-  { id: 1, time: '10:32:18', text: 'NVDA 220 附近减仓止盈半仓，剩余仓位继续观察。', parse: '卖出 NVDA 当前持仓的 50% · 参考价 $220.00', confidence: 96, status: 'pending', type: 'sell', symbol: 'NVDA', fraction: .5, price: 220 },
-  { id: 2, time: '09:48:03', text: 'TSLA 回踩 428 分批接第一笔，止损放 416 下方。', parse: '首笔仓位 4% · 限价 $428.00 · 止损 $415.90', confidence: 88, status: 'done', type: 'buy', symbol: 'TSLA', fraction: .04, price: 428 },
-  { id: 3, time: '昨天 15:42', text: 'AMD 拉升到 198，先落袋三分之一。', parse: '卖出 AMD 当前持仓的 33% · 参考价 $198.00', confidence: 94, status: 'done', type: 'sell', symbol: 'AMD', fraction: .33, price: 198 },
-  { id: 4, time: '10:36:41', text: 'PLTR 先看 174 一带，冲高别追，等回踩再说。', parse: '仅为观察观点 · 缺少明确买入动作与仓位', confidence: 58, status: 'pending', type: 'note', symbol: 'PLTR', fraction: 0, price: 174 },
-  { id: 5, time: '10:41:06', text: 'NVDA 如果站稳 223，剩余仓位继续拿，跌回 218 再处理。', parse: '持有 NVDA · 条件止损候选 $218.00 · 不立即交易', confidence: 79, status: 'pending', type: 'hold', symbol: 'NVDA', fraction: 0, price: 218 },
-  { id: 6, time: '10:45:22', text: 'AAPL 252.5 先开一笔，仓位不要大，止损 248。', parse: '买入 AAPL · 默认第一笔 4% · 限价 $252.50 · 止损 $248.00', confidence: 86, status: 'pending', type: 'buy', symbol: 'AAPL', fraction: .04, price: 252.5 }
-];
-
-const trades = [
-  { time:'今天 09:48:12', side:'buy', symbol:'TSLA', qty:93, signal:428, fill:428.34, lag:'9s / +0.08%', pnl:'—', source:'#swing-alerts' },
-  { time:'昨天 15:42:08', side:'sell', symbol:'AMD', qty:210, signal:198, fill:197.86, lag:'8s / −0.07%', pnl:'+$3,964', source:'#swing-alerts' },
-  { time:'9/16 13:06:31', side:'sell', symbol:'NVDA', qty:600, signal:217, fill:216.72, lag:'11s / −0.13%', pnl:'+$9,522', source:'#swing-alerts' },
-  { time:'9/15 10:18:44', side:'buy', symbol:'AMD', qty:640, signal:191.5, fill:191.73, lag:'13s / +0.12%', pnl:'—', source:'#swing-alerts' },
-  { time:'9/12 14:27:19', side:'buy', symbol:'NVDA', qty:1500, signal:207.5, fill:207.87, lag:'19s / +0.18%', pnl:'—', source:'#swing-alerts' },
-  { time:'9/11 11:05:55', side:'sell', symbol:'META', qty:380, signal:771, fill:770.41, lag:'15s / −0.08%', pnl:'+$12,304', source:'#swing-alerts' }
-];
-
-function money(value, decimals = 0) {
-  return new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', minimumFractionDigits:decimals, maximumFractionDigits:decimals }).format(value);
+function renderSummary(review) {
+  const m = review.metrics;
+  $('#periodText').textContent = `${dateTime(review.periodStart)} — ${dateTime(review.periodEnd)} · 已包含最后一晚消息`;
+  $('#winRate').textContent = `${number(m.winRatePct, 2)}%`;
+  $('#winFormula').textContent = `${m.wins} 盈 / ${m.losses} 亏 / ${m.flats} 持平`;
+  $('#rawMessages').textContent = number(m.rawMessages);
+  $('#closedLegs').textContent = number(m.closedLegs);
+  $('#medianReturn').textContent = pct(m.medianReturnPct);
+  $('#unresolved').textContent = number(m.tradeLikeUnresolved);
 }
-function currentValue() { return positions.reduce((sum,p)=>sum+p.shares*p.price,0); }
-function pnl(p) { return (p.price-p.avg)*p.shares; }
-function showToast(message) { const el=document.querySelector('#toast'); el.textContent=message; el.classList.add('show'); clearTimeout(showToast.timer); showToast.timer=setTimeout(()=>el.classList.remove('show'),2800); }
 
-async function probeBackend() {
-  const backendState=document.querySelector('#backendState');
-  const storageState=document.querySelector('#storageState');
+function renderActivity(rows) {
+  const max = Math.max(...rows.map((row) => row.messages), 1);
+  $('#activityChart').innerHTML = rows.map((row) => `<div class="day" title="${escapeHtml(row.date)} · ${row.messages} 条"><i style="height:${Math.max(8, row.messages / max * 100)}%"></i><span>${escapeHtml(row.date.slice(5).replace('-', '/'))}</span><b>${row.messages}</b></div>`).join('');
+}
+
+function renderCoverage(review) {
+  const c = review.coverage;
+  const items = [
+    ['原始消息', c.rawMessages, 100],
+    ['解析出的操作事件', c.parsedEvents, c.parsedEvents / c.rawMessages * 100],
+    ['纳入胜率的已完成交易腿', c.includedClosedLegs, c.includedClosedLegs / c.rawMessages * 100],
+    ['待人工理解的交易类消息', c.unresolvedTradeLike, c.unresolvedTradeLike / c.rawMessages * 100]
+  ];
+  $('#coverageFunnel').innerHTML = items.map(([label, value, width], index) => `<div><span>${label}<b>${value}</b></span><em><i style="width:${Math.max(width, 4)}%"></i></em>${index === 2 ? '<small>胜率分母</small>' : ''}</div>`).join('') + `<p>另排除重复操作事件 ${c.duplicatesExcluded} 条；中文名称映射等待复核 ${c.needsReview} 条。</p>`;
+}
+
+function renderSymbols() {
+  const [key, direction] = state.sort;
+  const rows = [...state.review.bySymbol].sort((a, b) => direction === 'asc' ? String(a[key]).localeCompare(String(b[key]), 'zh-CN', { numeric: true }) : String(b[key]).localeCompare(String(a[key]), 'zh-CN', { numeric: true }));
+  $('#symbolTable tbody').innerHTML = rows.length ? rows.map((row) => `<tr><td><b class="ticker">${escapeHtml(row.symbol)}</b></td><td>${row.closedLegs}</td><td class="positive">${row.wins}</td><td class="negative">${row.losses}</td><td><div class="rate"><i style="width:${row.winRatePct}%"></i><span>${number(row.winRatePct, 1)}%</span></div></td><td class="${row.averageReturnPct >= 0 ? 'positive' : 'negative'}">${pct(row.averageReturnPct)}</td></tr>`).join('') : '<tr><td colspan="6">逐标的统计只在连接本地数据库后显示。</td></tr>';
+}
+
+function actionLabel(action) { return action === 'sell' ? '卖出' : action === 'rebuy' ? '加回' : '买入'; }
+function reviewLabel(row) {
+  if (row.analysisIncluded) return '已纳入';
+  if (row.reviewStatus === 'needs_review') return '待复核';
+  if (row.reviewStatus === 'excluded_duplicate') return '重复排除';
+  return '未配对';
+}
+function renderLedger() {
+  let rows = state.review.legs;
+  if (state.filter === 'sell') rows = rows.filter((row) => row.action === 'sell');
+  if (state.filter === 'buy') rows = rows.filter((row) => row.action !== 'sell');
+  if (state.filter === 'review') rows = rows.filter((row) => row.reviewStatus === 'needs_review');
+  const visible = rows.slice(0, state.visible);
+  $('#ledgerRows').innerHTML = visible.length ? visible.map((row) => `<tr class="${row.analysisIncluded ? '' : 'dim'}"><td>${dateTime(row.occurredAt)}</td><td><span class="side ${row.action}">${actionLabel(row.action)}</span></td><td><b class="ticker">${escapeHtml(row.symbol)}</b></td><td>${money(row.entryPrice)}</td><td>${money(row.exitPrice)}</td><td>${row.positionFraction == null ? '未说明' : `${number(row.positionFraction * 100, 1)}%`}</td><td class="${row.returnPct > 0 ? 'positive' : row.returnPct < 0 ? 'negative' : ''}">${pct(row.returnPct)}</td><td><span class="status ${row.reviewStatus}">${reviewLabel(row)}</span></td><td><button class="message" data-message="${escapeHtml(row.content)}">查看原文</button></td></tr>`).join('') : '<tr><td colspan="9">操作价格与频道原文仅在本地后端显示，不进入公开静态页面。</td></tr>';
+  $('#ledgerCount').textContent = `显示 ${visible.length} / ${rows.length} 条操作事件`;
+  $('#showMore').hidden = visible.length >= rows.length;
+}
+
+function sessionQuote(quote) {
+  const sessions = [['盘后', quote.postMarket], ['盘前', quote.preMarket], ['夜盘', quote.overnight]].filter(([, value]) => value?.timestamp).sort((a, b) => new Date(b[1].timestamp) - new Date(a[1].timestamp));
+  return sessions[0] || ['常规盘', { last: quote.last, timestamp: null }];
+}
+
+async function loadQuotes() {
+  if (!state.review) return;
+  const symbols = state.review.bySymbol.slice(0, 6).map((row) => row.symbol).join(',');
+  $('#quoteList').innerHTML = '<div class="empty">正在读取长桥行情…</div>';
   try {
-    const response=await fetch('api/health',{headers:{Accept:'application/json'}});
-    if(!response.ok) throw new Error('backend unavailable');
-    const health=await response.json();
-    backendState.textContent='后端服务已连接';
-    storageState.textContent=`存储 ${health.storage} · API v${health.version}`;
+    const response = await fetch(`/api/market/quotes?symbols=${encodeURIComponent(symbols)}`);
+    if (!response.ok) throw new Error('unavailable');
+    const data = await response.json();
+    $('#quoteList').innerHTML = data.quotes.map((quote) => { const [session, live] = sessionQuote(quote); return `<div><b>${escapeHtml(quote.symbol)}</b><strong>$${number(live.last, 2)}</strong><span class="${quote.changePct >= 0 ? 'positive' : 'negative'}">${pct(quote.changePct)}</span><small>${session}${live.timestamp ? ` · ${dateTime(live.timestamp)}` : ''}</small></div>`; }).join('');
+    $('#quoteTime').textContent = `长桥读取于 ${dateTime(data.receivedAt)}；盘前/盘后与常规盘分开标记。`;
+  } catch { $('#quoteList').innerHTML = '<div class="empty">长桥暂不可用；历史胜率不受影响。</div>'; }
+}
+
+async function loadDashboard() {
+  try {
+    const response = await fetch('/api/dashboard', { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error('backend unavailable');
+    const data = await response.json();
+    if (!data.strategyReview) throw new Error('history unavailable');
+    state.review = data.strategyReview;
+    $('#connectionTitle').textContent = '本地数据库已连接';
+    $('#connectionDetail').textContent = `PostgreSQL · ${data.strategyReview.metrics.rawMessages} 条原始消息`;
+    renderSummary(state.review); renderActivity(state.review.dailyActivity); renderCoverage(state.review); renderSymbols(); renderLedger();
+    await loadQuotes();
   } catch {
-    backendState.textContent='静态演示模式';
-    storageState.textContent='未连接 Discord、行情或数据库';
+    state.review = PUBLIC_SNAPSHOT;
+    $('#connectionTitle').textContent = '公开汇总快照';
+    $('#connectionDetail').textContent = '原文与逐笔价格保持私密';
+    renderSummary(state.review); renderActivity(state.review.dailyActivity); renderCoverage(state.review); renderSymbols(); renderLedger();
+    $('#quoteList').innerHTML = '<div class="empty">长桥实时行情仅在本地服务提供。</div>';
+    toast('当前显示公开汇总快照；原文和逐笔价格未公开。');
   }
 }
 
-function renderSignals() {
-  const visible = signals.slice(0, signalCursor).slice().reverse();
-  document.querySelector('#signalFeed').innerHTML = visible.map(s => `
-    <article class="signal-card ${s.status==='done'?'done':''}" data-id="${s.id}">
-      <div class="avatar">W</div>
-      <div class="signal-main"><div class="signal-author"><b>WaveTrader</b><time>· ${s.time}</time></div><p class="signal-copy">${s.text}</p><div class="parse-box"><strong>AI 解析</strong><span>${s.parse}</span><div class="confidence"><span>置信度 ${s.confidence}%</span><div class="confidence-bar"><i style="width:${s.confidence}%"></i></div>${s.confidence<65?'<span class="negative">不可自动执行</span>':''}</div></div></div>
-      <div class="signal-action"><span class="action-chip ${s.status}">${s.status==='done'?'已模拟':s.status==='ignored'?'已忽略':'待确认'}</span>${s.status==='pending'?`<button class="confirm" data-action="confirm">确认</button><button class="ignore" data-action="ignore">忽略</button>`:''}</div>
-    </article>`).join('');
-}
-
-function renderPositions() {
-  const equity = capital + 38420;
-  document.querySelector('#positionRows').innerHTML = positions.map(p => {
-    const value=p.shares*p.price, gain=pnl(p), weight=value/equity*100;
-    return `<tr><td><b>${p.symbol}</b><span class="side-label">NASDAQ</span></td><td>${p.shares.toLocaleString()} 股<span class="side-label">均价 ${money(p.avg,2)}</span></td><td><b>${money(p.price,2)}</b></td><td>${money(value)}</td><td>${weight.toFixed(1)}%</td><td class="${gain>=0?'positive':'negative'}">${gain>=0?'+':''}${money(gain)}</td></tr>`;
-  }).join('');
-  document.querySelector('#exposureBars').innerHTML = positions.map(p=>{const weight=p.shares*p.price/equity*100;return `<div class="exposure-item"><div class="bar-label"><span>${p.symbol}</span><b>${weight.toFixed(1)}%</b></div><div class="bar-track"><i style="width:${Math.min(weight/20*100,100)}%;${weight>20?'background:var(--red)':''}"></i></div></div>`}).join('');
-  updateCapitalCards();
-}
-
-function renderTrades(filter='all') {
-  const rows=trades.filter(t=>filter==='all'||t.side===filter);
-  document.querySelector('#tradeRows').innerHTML=rows.map(t=>`<tr><td>${t.time}</td><td><span class="${t.side==='buy'?'side-buy':'side-sell'}">${t.side==='buy'?'买入':'卖出'}</span></td><td><b>${t.symbol}</b></td><td>${t.qty.toLocaleString()}</td><td>${money(t.signal,2)}</td><td>${money(t.fill,2)}</td><td>${t.lag}</td><td class="${t.pnl.startsWith('+')?'positive':''}">${t.pnl}</td><td>${t.source}</td></tr>`).join('');
-}
-
-function updateCapitalCards() {
-  const equity=capital+38420, invested=currentValue(), util=invested/equity*100, cash=equity-invested, cap=Math.max(0,equity*.70-invested);
-  document.querySelector('#equityValue').textContent=money(equity);
-  document.querySelector('#returnValue').textContent=`+${money(38420)}`;
-  document.querySelector('#returnRate').textContent=`+${(38420/capital*100).toFixed(2)}% 起始至今`;
-  document.querySelector('#utilValue').textContent=`${util.toFixed(1)}%`;
-  document.querySelector('#utilBar').style.width=`${Math.min(util/70*100,100)}%`;
-  document.querySelector('#ringValue').textContent=`${Math.round(util)}%`;
-  document.querySelector('.allocation-ring').style.background=`conic-gradient(var(--mint) 0 ${util}%,#18303b ${util}%)`;
-  document.querySelector('#stockAlloc').textContent=money(invested);
-  document.querySelector('#cashValue').textContent=money(cash);
-  document.querySelector('#capacityValue').textContent=money(cap);
-}
-
-function handleSignal(id, action) {
-  const s=signals.find(x=>x.id===id); if(!s) return;
-  if(action==='ignore'){s.status='ignored';renderSignals();showToast('已保留原文并标记为忽略，不计入收益。');return;}
-  if(s.type==='note'||s.confidence<65){showToast('这条消息不够明确，不能生成交易。');return;}
-  s.status='done';
-  if(s.type==='sell'){
-    const p=positions.find(x=>x.symbol===s.symbol); if(p){const qty=Math.max(1,Math.floor(p.shares*s.fraction));p.shares-=qty;trades.unshift({time:'刚刚',side:'sell',symbol:s.symbol,qty,signal:s.price,fill:s.price-.09,lag:'7s / −0.04%',pnl:`+${money((s.price-p.avg)*qty)}`,source:'#swing-alerts'});}
-  } else if(s.type==='buy'){
-    const budget=capital*s.fraction,qty=Math.floor(budget/s.price),fill=s.price+.11;let p=positions.find(x=>x.symbol===s.symbol);if(p){p.avg=(p.avg*p.shares+fill*qty)/(p.shares+qty);p.shares+=qty;p.price=fill;}else{positions.push({symbol:s.symbol,shares:qty,avg:fill,price:fill});}trades.unshift({time:'刚刚',side:'buy',symbol:s.symbol,qty,signal:s.price,fill,lag:'8s / +0.04%',pnl:'—',source:'#swing-alerts'});
-  }
-  renderSignals();renderPositions();renderTrades();showToast(`已按规则写入 ${s.symbol} 模拟交易，并保留信号价与成交差异。`);
-}
-
-document.querySelector('#signalFeed').addEventListener('click',e=>{const button=e.target.closest('[data-action]');if(!button)return;handleSignal(Number(button.closest('.signal-card').dataset.id),button.dataset.action)});
-document.querySelector('#nextSignal').addEventListener('click',()=>{if(signalCursor<signals.length){signalCursor++;renderSignals();showToast('收到 1 条新模拟消息，已完成结构化解析。')}else showToast('演示消息已经全部送达。')});
-document.querySelector('#streamToggle').addEventListener('click',e=>{streamOn=!streamOn;e.target.textContent=streamOn?'暂停模拟推送':'继续模拟推送';showToast(streamOn?'模拟消息流已继续。':'模拟消息流已暂停。')});
-document.querySelector('#capitalSelect').addEventListener('change',e=>{capital=Number(e.target.value);renderPositions();showToast(`初始资金已切换为 ${money(capital)}，仓位比例已重算。`)});
-document.querySelector('#markPrices').addEventListener('click',()=>{positions.forEach((p,i)=>p.price=+(p.price*(1+[.003,-.002,.004,.001][i%4])).toFixed(2));renderPositions();showToast('已用下一帧演示行情重估持仓。')});
-document.querySelectorAll('[data-target]').forEach(btn=>btn.addEventListener('click',()=>{const target=document.querySelector(`#${btn.dataset.target}`);if(target)target.scrollIntoView({behavior:'smooth'});document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n===btn))}));
-document.querySelectorAll('.filter-tabs button').forEach(btn=>btn.addEventListener('click',()=>{document.querySelectorAll('.filter-tabs button').forEach(b=>b.classList.remove('active'));btn.classList.add('active');renderTrades(btn.dataset.filter)}));
-document.querySelector('#resetDemo').addEventListener('click',()=>location.reload());
-
-renderSignals();renderPositions();renderTrades();
-probeBackend();
+$('#refreshButton').addEventListener('click', () => { state.visible = 50; loadDashboard(); });
+$('#quoteRefresh').addEventListener('click', loadQuotes);
+$('#showMore').addEventListener('click', () => { state.visible += 50; renderLedger(); });
+document.querySelectorAll('[data-filter]').forEach((button) => button.addEventListener('click', () => { document.querySelectorAll('[data-filter]').forEach((item) => item.classList.remove('active')); button.classList.add('active'); state.filter = button.dataset.filter; state.visible = 50; renderLedger(); }));
+$('#symbolTable thead').addEventListener('click', (event) => { const th = event.target.closest('[data-sort]'); if (!th || !state.review) return; state.sort = state.sort[0] === th.dataset.sort ? [th.dataset.sort, state.sort[1] === 'asc' ? 'desc' : 'asc'] : [th.dataset.sort, 'desc']; renderSymbols(); });
+$('#ledgerRows').addEventListener('click', (event) => { const button = event.target.closest('[data-message]'); if (button) toast(button.dataset.message); });
+document.querySelectorAll('.rail nav a').forEach((link) => link.addEventListener('click', () => { document.querySelectorAll('.rail nav a').forEach((item) => item.classList.remove('active')); link.classList.add('active'); }));
+loadDashboard();

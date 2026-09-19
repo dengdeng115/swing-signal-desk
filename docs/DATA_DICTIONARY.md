@@ -54,7 +54,9 @@ schema_migrations           记录已经执行过的数据库迁移
 |---|---|---|---|
 | `portfolios` | 一个模拟投资组合 | 记录初始资金、现金、权益和风控参数 | 已使用 |
 | `discord_subscriptions` | 一个服务器/频道/发布者监听范围 | 控制 Bot 允许采集哪里、谁的消息 | 已使用 |
-| `discord_message_events` | 一次消息创建、编辑、删除或测试事件 | 永久保留 Discord 原始历史 | 已使用 |
+| `discord_message_events` | 一次消息创建、编辑、删除、历史回补或测试事件 | 永久保留 Discord 原始历史 | 已使用 |
+| `discord_history_imports` | 一次 Discord 历史回补批次 | 记录范围、文件哈希、数量和质量指标 | 已使用 |
+| `strategy_trade_legs` | 一条明确买入动作或一个进出价配对交易腿 | 计算信号级理论胜率与收益 | 已使用 |
 | `signal_interpretations` | 一次解析结果 | 保存规则或 AI 对消息的候选理解 | 已使用 |
 | `review_decisions` | 一次人工审核动作 | 保存确认、忽略、拒绝或修改 | 已使用 |
 | `market_quotes` | 某股票在某时点的一条行情 | 区分行情时间和系统收到时间 | 等待长桥接入 |
@@ -64,7 +66,7 @@ schema_migrations           记录已经执行过的数据库迁移
 | `audit_events` | 一次关键系统或人工行为 | 追踪安全修正、配置变化和异常 | 已使用 |
 | `schema_migrations` | 一个已执行的迁移文件 | 防止重复建表或漏执行升级 | 已使用 |
 
-部分表现在为空是正常的：长桥行情和完整模拟成交模块尚未接入，因此 `market_quotes`、`paper_orders`、`paper_fills`、`position_snapshots` 可能没有记录。
+部分表现在为空是正常的：网页已能临时读取长桥报价，但尚未把行情定时落入 `market_quotes`；完整模拟成交模块也未启用，因此 `market_quotes`、`paper_orders`、`paper_fills`、`position_snapshots` 可能没有记录。
 
 ## 4. `portfolios`：模拟组合
 
@@ -119,6 +121,9 @@ schema_migrations           记录已经执行过的数据库迁移
 | `discord_created_at` | `timestamptz` | 否 | Discord 侧显示的消息创建时间 |
 | `received_at` | `timestamptz` | 是 | 本系统收到并记录该事件的时间 |
 | `raw_payload` | `jsonb` | 是 | 附件、Embed 等需要保留但未拆列的原始信息 |
+| `ingestion_mode` | `text` | 是 | `realtime`、`historical_backfill` 或 `manual_test`，区分实时、回补与测试 |
+| `history_import_id` | `uuid` | 否 | 历史回补时关联 `discord_history_imports.id` |
+| `source_fetched_at` | `timestamptz` | 否 | 回补程序从 Discord 取得该批数据的时间 |
 
 常用时间差：`received_at - discord_created_at` 是 Discord 到采集服务的接收延迟。它不等于最终模拟成交延迟。
 
@@ -130,6 +135,28 @@ schema_migrations           记录已经执行过的数据库迁移
 | `update` | 原消息被编辑；必须新增一行 |
 | `delete` | 原消息被删除；必须保留删除事件 |
 | `manual_test` | 本地烟雾测试，不是 Discord 正式消息 |
+
+## 6A. `discord_history_imports`：历史回补批次
+
+一行代表一个可复现的历史导入。`source_file_hash` 是源 JSON 的 SHA-256，具有唯一约束，因此同一份文件重复执行不会创建第二批数据。`period_start` / `period_end` 是请求范围，`fetched_count` 是源消息数，`imported_count` 是成功关联到数据库的消息数，`details` 保存解析版本、胜率口径和质量指标。`status` 只能是 `running`、`completed` 或 `failed`。
+
+## 6B. `strategy_trade_legs`：策略操作与已完成交易腿
+
+一行表示一条规则明确提取出的操作。`buy` / `rebuy` 只记录入场动作，尚未配对时 `is_closed_leg=false`；`sell` 若同时明确给出卖出价与历史成本价，则形成一条已完成交易腿。同一消息列出多个成本批次时会生成多行，并用 `leg_index` 区分。
+
+| 关键字段 | 含义 |
+|---|---|
+| `entry_price` / `exit_price` | 频道明确写出的成本价和卖出价；不是长桥行情 |
+| `position_fraction` | 文本明确说明的仓位比例；未说明时为空，不应猜测 |
+| `gross_return_pct` | `(exit_price-entry_price)/entry_price×100`，未扣费用和滑点 |
+| `outcome` | `win`、`loss`、`flat` 或未平仓的 `open` |
+| `review_status` | `auto_included`、`needs_review` 或 `excluded_duplicate` |
+| `analysis_included` | 是否进入当前胜率分母；仅严格、非重复、已完成腿为 `true` |
+| `duplicate_of_message_id` | 规范化原文重复时指向最早消息；重复记录仍保留但不重复统计 |
+| `parser_version` | 当前为 `history-rules-v1`，便于未来重跑比较 |
+| `occurred_at` | Discord 原消息发生时间 |
+
+当前月度胜率定义为：`wins / (wins + losses + flats)`。持平也进入分母。该指标是信号级理论胜率，不等于组合收益率，也不等于未来盈利概率。
 
 ## 7. `signal_interpretations`：候选信号解析
 
@@ -331,6 +358,8 @@ order by created_at desc;
 | 父表字段 | 子表字段 | 关系 |
 |---|---|---|
 | `discord_message_events.id` | `signal_interpretations.message_event_id` | 一次原始事件可以产生多个版本的候选解析 |
+| `discord_history_imports.id` | `discord_message_events.history_import_id` | 一个历史回补批次包含多条原始消息 |
+| `discord_message_events.id` | `strategy_trade_legs.message_event_id` | 一条原始消息可拆成多个操作或成本批次交易腿 |
 | `signal_interpretations.id` | `review_decisions.signal_id` | 一个候选可以有多次审核记录 |
 | `signal_interpretations.id` | `paper_orders.signal_id` | 一个候选可生成模拟订单；当前业务通常限制为可审计流程 |
 | `portfolios.id` | `paper_orders.portfolio_id` | 一个组合可以有多张模拟订单 |

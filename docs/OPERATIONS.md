@@ -22,6 +22,22 @@ npm start
 
 健康检查必须显示 `storage: postgres` 与 `database: swing_signal_desk`。应用使用 `swing_signal_app`；Navicat 日常查看使用 `swing_signal_readonly`，不要长期使用 `postgres` 超级用户。
 
+## 一个月历史回补
+
+历史源文件保存在被 Git 忽略的 `server/data/stockrocks-last-month.json`，不得上传公开仓库。先执行迁移，再导入：
+
+```powershell
+npm run db:migrate
+npm run db:import-history
+npm run db:verify
+```
+
+导入以源文件 SHA-256 和 Discord Message ID 防重；重复执行应返回 `idempotent: true`。网页的胜率只使用 `strategy_trade_legs.analysis_included=true` 的严格、非重复、已完成交易腿。新增或修正解析规则时必须使用新的 `parser_version`，不能覆盖旧结果。
+
+## 长桥行情参考
+
+本地后端的 `/api/market/quotes?symbols=NVDA,AMD` 通过已安装的长桥 CLI 只读查询报价，最多接受 20 个合法美股代码并缓存 30 秒。网页应显示读取时间和盘前/盘后标签。该接口不下单，也不得用当前报价替换频道的历史进出价。
+
 ## Discord 接入
 
 先完成 `docs/SECURITY.md` 中的权限。

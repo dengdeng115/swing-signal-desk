@@ -34,3 +34,12 @@ test('manual parse creates an auditable candidate', async () => {
   assert.equal(response.body.risk.mode, 'paper_only');
   assert.equal(response.body.risk.requiresHumanConfirmation, true);
 });
+
+test('market quote endpoint uses the injected read-only quote service', async () => {
+  const quoteService = { getQuotes: async (symbols) => ({ source: 'longbridge', quotes: [{ symbol: symbols[0], last: 220 }] }) };
+  const response = await request(createApp({ config, repository: new MemoryRepository(), quoteService }))
+    .get('/api/market/quotes?symbols=NVDA');
+  assert.equal(response.status, 200);
+  assert.equal(response.body.source, 'longbridge');
+  assert.equal(response.body.quotes[0].last, 220);
+});

@@ -10,7 +10,7 @@ import { evaluatePaperSignal } from './core/risk-engine.js';
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const staticDir = path.resolve(currentDir, '../../dist');
 
-export function createApp({ config, repository }) {
+export function createApp({ config, repository, quoteService = null }) {
   const app = express();
   const sseClients = new Set();
 
@@ -21,12 +21,20 @@ export function createApp({ config, repository }) {
 
   app.get('/api/health', async (_request, response, next) => {
     try {
-      response.json({ ok: true, version: '0.2.0', integrations: { discord: config.discord.enabled, ai: config.ai.enabled }, ...(await repository.health()) });
+      response.json({ ok: true, version: '0.3.0', integrations: { discord: config.discord.enabled, ai: config.ai.enabled }, ...(await repository.health()) });
     } catch (error) { next(error); }
   });
 
   app.get('/api/dashboard', async (_request, response, next) => {
     try { response.json(await repository.dashboard()); } catch (error) { next(error); }
+  });
+
+  app.get('/api/market/quotes', async (request, response, next) => {
+    try {
+      if (!quoteService) return response.status(503).json({ error: 'longbridge_unavailable' });
+      const symbols = String(request.query.symbols || '').split(',');
+      response.json(await quoteService.getQuotes(symbols));
+    } catch (error) { next(error); }
   });
 
   app.post('/api/signals/parse', async (request, response, next) => {
