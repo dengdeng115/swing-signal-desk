@@ -21,12 +21,40 @@ export function createApp({ config, repository, quoteService = null }) {
 
   app.get('/api/health', async (_request, response, next) => {
     try {
-      response.json({ ok: true, version: '0.6.0', integrations: { discord: config.discord.enabled, ai: config.ai.enabled }, runtime: app.locals.integrationStatus?.() || null, ...(await repository.health()) });
+      response.json({ ok: true, version: '0.7.0', integrations: { discord: config.discord.enabled, ai: config.ai.enabled }, runtime: app.locals.integrationStatus?.() || null, ...(await repository.health()) });
     } catch (error) { next(error); }
   });
 
   app.get('/api/dashboard', async (_request, response, next) => {
     try { response.json(await repository.dashboard()); } catch (error) { next(error); }
+  });
+
+  app.get('/api/history/messages', async (request, response, next) => {
+    try {
+      const page = Math.max(1, Math.min(10_000, Number.parseInt(request.query.page, 10) || 1));
+      const pageSize = Math.max(10, Math.min(100, Number.parseInt(request.query.pageSize, 10) || 50));
+      response.json(await repository.getMessageHistory({ page, pageSize }));
+    } catch (error) { next(error); }
+  });
+
+  app.post('/api/messages/:messageEventId/review', async (request, response, next) => {
+    try {
+      const { messageEventId } = request.params;
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(messageEventId)) {
+        return response.status(400).json({ error: 'invalid_message_event_id' });
+      }
+      const decision = request.body?.decision;
+      if (!['confirm', 'ignore'].includes(decision)) return response.status(400).json({ error: 'invalid_review_decision' });
+      const record = await repository.recordMessageReview({
+        messageEventId,
+        decision,
+        reviewer: 'local_dashboard',
+        reason: typeof request.body?.reason === 'string' ? request.body.reason.slice(0, 500) : null
+      });
+      if (!record) return response.status(404).json({ error: 'message_not_found' });
+      broadcast({ type: 'message_reviewed', data: record });
+      response.status(201).json(record);
+    } catch (error) { next(error); }
   });
 
   app.post('/api/discord/sync', async (_request, response, next) => {

@@ -3,7 +3,7 @@
 Discord 美股波段频道消息留档、结构化解析、有限资金模拟跟单、持仓和收益复盘工作台。
 
 - 在线静态演示：https://dengdeng115.github.io/swing-signal-desk/
-- 当前版本：v0.6.0
+- 当前版本：v0.7.0
 - 状态：本机 Discord、PostgreSQL、滚动周/月/全部历史回放和长桥只读报价已启用；AI 与云端动态后端尚未启用。
 
 ## 已有能力
@@ -26,6 +26,9 @@ Discord 美股波段频道消息留档、结构化解析、有限资金模拟跟
 - 严格新信号落库后约 5 秒合并触发一次有限资金回放，避免一批消息造成重复计算。
 - 桌面端左侧导航固定在视窗内并自动高亮当前板块；窄屏改为顶部固定横向导航，并提供回到顶部按钮。
 - 支持 PWA 安装，同时提供桌面“波段信号台”快捷入口，以无地址栏独立窗口打开本机实时版。
+- 实时动态区把解析后的买卖/仓位与全部 Discord 原话并排展示，最新记录在顶部，5 分钟内新消息闪红提醒，并显示近 24 小时消息数。
+- “待人工理解”是可展开、可确认的持久队列；确认只追加审计记录并从待办隐藏，原始消息不会删除。
+- 历史档案可分页翻阅全部原始消息，并可切换查看解析交易记录。
 
 ## 快速开始
 
@@ -69,7 +72,7 @@ npm run db:replay
 - `test/`：解析、风控和 API 自动测试。
 - `docs/PROJECT_CONTEXT.md`：目标、边界、默认规则和下次继续入口。
 - `docs/ARCHITECTURE.md`：架构和可信边界。
-- `docs/DATA_DICTIONARY.md`：17 张表、全部字段、状态值、指标口径和 Navicat 只读查询。
+- `docs/DATA_DICTIONARY.md`：18 张表、全部字段、状态值、指标口径和 Navicat 只读查询。
 - `docs/SECURITY.md`：Discord 权限、密钥与 AI 安全规则。
 - `docs/OPERATIONS.md`：本机、数据库、Discord 和 AI 操作步骤。
 - `docs/POSTGRES_SETUP.md`：PostgreSQL 权限、Navicat、迁移、验证、备份和故障排查。

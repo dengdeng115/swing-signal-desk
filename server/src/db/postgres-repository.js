@@ -88,6 +88,38 @@ function mapPostgresAudit(row) {
   };
 }
 
+function mapMessageReview(row) {
+  return {
+    id: row.id,
+    messageEventId: row.message_event_id,
+    decision: row.decision,
+    reviewer: row.reviewer,
+    reason: row.reason,
+    createdAt: iso(row.created_at)
+  };
+}
+
+function mapStrategyLeg(row) {
+  return {
+    id: row.id,
+    messageEventId: row.message_event_id,
+    occurredAt: iso(row.occurred_at),
+    action: row.action,
+    symbol: row.symbol,
+    entryPrice: Number(row.entry_price),
+    exitPrice: nullableNumber(row.exit_price),
+    positionFraction: nullableNumber(row.position_fraction),
+    closedLeg: row.is_closed_leg,
+    returnPct: nullableNumber(row.gross_return_pct),
+    outcome: row.outcome,
+    confidence: Number(row.confidence),
+    reviewStatus: row.review_status,
+    analysisIncluded: row.analysis_included,
+    notes: row.notes,
+    content: row.content
+  };
+}
+
 function summarizeLegRows(legRows) {
   const included = legRows.filter((row) => row.analysis_included);
   const wins = included.filter((row) => row.outcome === 'win').length;
@@ -177,22 +209,43 @@ function buildStrategyReview(importRow, legRows, dailyRows, rawRows) {
     periods,
     bySymbol: month.bySymbol,
     dailyActivity: dailyRows.map((row) => ({ date: row.day, messages: Number(row.message_count) })),
-    legs: legRows.map((row) => ({
-      id: row.id,
-      occurredAt: iso(row.occurred_at),
-      action: row.action,
-      symbol: row.symbol,
-      entryPrice: Number(row.entry_price),
-      exitPrice: nullableNumber(row.exit_price),
-      positionFraction: nullableNumber(row.position_fraction),
-      closedLeg: row.is_closed_leg,
-      returnPct: nullableNumber(row.gross_return_pct),
-      outcome: row.outcome,
-      confidence: Number(row.confidence),
-      reviewStatus: row.review_status,
-      analysisIncluded: row.analysis_included,
-      content: row.content
-    }))
+    legs: legRows.map(mapStrategyLeg)
+  };
+}
+
+function buildLiveDesk(rawRows, legRows, reviewRows) {
+  const now = Date.now();
+  const latestReview = new Map(reviewRows.map((row) => [row.message_event_id, mapMessageReview(row)]));
+  const messages = rawRows
+    .map((row) => {
+      const parsed = parseHistoricalTradeMessage(row.content);
+      const createdAt = iso(row.discord_created_at || row.received_at);
+      const ageMs = createdAt ? now - new Date(createdAt).getTime() : Number.POSITIVE_INFINITY;
+      return {
+        id: row.id,
+        messageId: row.discord_message_id,
+        createdAt,
+        receivedAt: iso(row.received_at),
+        content: row.content,
+        kind: parsed.events.length ? 'trade' : parsed.unresolvedReason === 'trade_like_but_not_strict' ? 'needs_review' : 'commentary',
+        actionCount: parsed.events.length,
+        isFresh: ageMs >= 0 && ageMs <= 5 * 60_000,
+        review: latestReview.get(row.id) || null
+      };
+    })
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const actions = legRows.map(mapStrategyLeg).sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt));
+  const pendingReview = messages.filter((message) => message.kind === 'needs_review' && !message.review);
+  const dayCutoff = now - 24 * 60 * 60_000;
+  return {
+    generatedAt: new Date(now).toISOString(),
+    recent24hCount: messages.filter((message) => { const time = new Date(message.createdAt).getTime(); return time >= dayCutoff && time <= now; }).length,
+    recent24hTradeCount: actions.filter((action) => { const time = new Date(action.occurredAt).getTime(); return time >= dayCutoff && time <= now; }).length,
+    pendingReviewCount: pendingReview.length,
+    reviewedCount: latestReview.size,
+    latestMessages: messages.slice(0, 30),
+    latestActions: actions.slice(0, 30),
+    reviewQueue: pendingReview.slice(0, 100)
   };
 }
 
@@ -310,7 +363,7 @@ export class PostgresRepository {
   }
 
   async dashboard() {
-    const [portfolio, positions, messages, signals, audit, historyImport, strategyLegs, dailyActivity, replayRun, rawStrategyMessages] = await Promise.all([
+    const [portfolio, positions, messages, signals, audit, historyImport, strategyLegs, dailyActivity, replayRun, rawStrategyMessages, messageReviews] = await Promise.all([
       this.pool.query('select * from portfolios order by created_at limit 1'),
       this.pool.query('select distinct on (symbol) * from position_snapshots order by symbol, captured_at desc'),
       this.pool.query('select * from discord_message_events order by received_at desc limit 50'),
@@ -330,12 +383,14 @@ export class PostgresRepository {
           and discord_created_at >= now() - interval '30 days'
         group by 1 order by 1`),
       this.pool.query("select * from strategy_replay_runs where status='completed' order by completed_at desc limit 1"),
-      this.pool.query(`select discord_message_id, content, discord_created_at
+      this.pool.query(`select id, discord_message_id, content, discord_created_at, received_at
         from discord_message_events where event_type='create' and ingestion_mode<>'manual_test'
           and (channel_id,author_id)=(select channel_id,author_id from discord_message_events
             where history_import_id=(select id from discord_history_imports where status='completed' order by completed_at desc limit 1)
             group by channel_id,author_id order by count(*) desc limit 1)
-        order by discord_created_at`)
+        order by discord_created_at`),
+      this.pool.query(`select distinct on (message_event_id) * from message_review_decisions
+        order by message_event_id, created_at desc`)
     ]);
     const latestRun = replayRun.rows[0];
     const [replayEvents, replaySnapshots, replayPositions] = latestRun ? await Promise.all([
@@ -351,8 +406,76 @@ export class PostgresRepository {
       signals: signals.rows.map(mapPostgresSignal),
       audit: audit.rows.map(mapPostgresAudit),
       strategyReview: buildStrategyReview(historyImport.rows[0], strategyLegs.rows, dailyActivity.rows, rawStrategyMessages.rows),
-      accountReplay: mapAccountReplay(latestRun, replayEvents.rows, replaySnapshots.rows, replayPositions.rows)
+      accountReplay: mapAccountReplay(latestRun, replayEvents.rows, replaySnapshots.rows, replayPositions.rows),
+      liveDesk: buildLiveDesk(rawStrategyMessages.rows, strategyLegs.rows, messageReviews.rows)
     };
+  }
+
+  async getMessageHistory({ page = 1, pageSize = 50 } = {}) {
+    const offset = (page - 1) * pageSize;
+    const target = `(select channel_id,author_id from discord_message_events
+      where history_import_id=(select id from discord_history_imports where status='completed' order by completed_at desc limit 1)
+      group by channel_id,author_id order by count(*) desc limit 1)`;
+    const [countResult, messageResult] = await Promise.all([
+      this.pool.query(`select count(*)::int as total from discord_message_events
+        where event_type='create' and ingestion_mode<>'manual_test' and (channel_id,author_id)=${target}`),
+      this.pool.query(`select * from discord_message_events
+        where event_type='create' and ingestion_mode<>'manual_test' and (channel_id,author_id)=${target}
+        order by discord_created_at desc, received_at desc limit $1 offset $2`, [pageSize, offset])
+    ]);
+    const ids = messageResult.rows.map((row) => row.id);
+    const legs = ids.length ? await this.pool.query(
+      `select l.*, m.content from strategy_trade_legs l join discord_message_events m on m.id=l.message_event_id
+       where l.message_event_id=any($1::uuid[]) order by l.occurred_at desc, l.leg_index`, [ids]
+    ) : { rows: [] };
+    const legsByMessage = new Map();
+    for (const row of legs.rows) {
+      const list = legsByMessage.get(row.message_event_id) || [];
+      list.push(mapStrategyLeg(row));
+      legsByMessage.set(row.message_event_id, list);
+    }
+    return {
+      page,
+      pageSize,
+      total: Number(countResult.rows[0]?.total || 0),
+      items: messageResult.rows.map((row) => {
+        const parsed = parseHistoricalTradeMessage(row.content);
+        return {
+          ...mapPostgresMessage(row),
+          kind: parsed.events.length ? 'trade' : parsed.unresolvedReason === 'trade_like_but_not_strict' ? 'needs_review' : 'commentary',
+          actions: legsByMessage.get(row.id) || []
+        };
+      })
+    };
+  }
+
+  async recordMessageReview({ messageEventId, decision, reviewer, reason = null }) {
+    const client = await this.pool.connect();
+    try {
+      await client.query('begin');
+      const message = await client.query("select id,content from discord_message_events where id=$1 and event_type='create'", [messageEventId]);
+      if (!message.rowCount || parseHistoricalTradeMessage(message.rows[0].content).unresolvedReason !== 'trade_like_but_not_strict') {
+        await client.query('rollback');
+        return null;
+      }
+      const result = await client.query(
+        `insert into message_review_decisions (message_event_id,decision,reviewer,reason)
+         values ($1,$2,$3,$4) returning *`,
+        [messageEventId, decision, reviewer, reason]
+      );
+      await client.query(
+        `insert into audit_events (actor_type,actor_id,action,entity_type,entity_id,details)
+         values ('human',$1,'message_reviewed','discord_message_event',$2,$3)`,
+        [reviewer, messageEventId, { decision, reason }]
+      );
+      await client.query('commit');
+      return mapMessageReview(result.rows[0]);
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async getPortfolio() {

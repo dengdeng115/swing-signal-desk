@@ -21,7 +21,7 @@ const config = {
 test('health reports memory storage and disabled integrations', async () => {
   const response = await request(createApp({ config, repository: new MemoryRepository() })).get('/api/health');
   assert.equal(response.status, 200);
-  assert.equal(response.body.version, '0.6.0');
+  assert.equal(response.body.version, '0.7.0');
   assert.equal(response.body.storage, 'memory');
   assert.equal(response.body.integrations.discord, false);
 });
@@ -36,7 +36,7 @@ test('desktop web app assets are available', async () => {
   assert.equal(manifest.status, 200);
   assert.equal(manifest.body.display, 'standalone');
   assert.equal(worker.status, 200);
-  assert.match(worker.text, /swing-signal-desk-v060/);
+  assert.match(worker.text, /swing-signal-desk-v070/);
   assert.equal(icon.status, 200);
 });
 
@@ -73,5 +73,27 @@ test('message create ingestion is idempotent during catch-up', async () => {
   const second = await repository.recordMessage(event);
   assert.equal(first.isNew, true);
   assert.equal(second.isNew, false);
+  assert.equal((await repository.dashboard()).messages.length, 1);
+});
+
+test('message history is paginated and an acknowledged review leaves the pending queue', async () => {
+  const repository = new MemoryRepository();
+  const message = await repository.recordMessage({
+    messageId: 'discord-review-1', eventType: 'create', guildId: 'g', channelId: 'c', authorId: 'a',
+    content: '这轮7700抄底的 还是买2卖1 急跌吸 异动出一半 conl', discordCreatedAt: new Date().toISOString()
+  });
+  const app = createApp({ config, repository });
+  const history = await request(app).get('/api/history/messages?page=1&pageSize=10');
+  assert.equal(history.status, 200);
+  assert.equal(history.body.total, 1);
+  assert.equal(history.body.items[0].kind, 'needs_review');
+  const beforeReview = await repository.dashboard();
+  assert.equal(beforeReview.liveDesk.pendingReviewCount, 1);
+  assert.equal(beforeReview.liveDesk.latestMessages[0].isFresh, true);
+
+  const review = await request(app).post(`/api/messages/${message.id}/review`).send({ decision: 'confirm' });
+  assert.equal(review.status, 201);
+  assert.equal(review.body.decision, 'confirm');
+  assert.equal((await repository.dashboard()).liveDesk.pendingReviewCount, 0);
   assert.equal((await repository.dashboard()).messages.length, 1);
 });

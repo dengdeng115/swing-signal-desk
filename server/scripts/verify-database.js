@@ -20,6 +20,7 @@ async function verifyApplicationRole() {
       pool.query(`select
         (select count(*)::int from discord_message_events) as messages,
         (select count(*)::int from signal_interpretations) as signals,
+        (select count(*)::int from message_review_decisions) as message_reviews,
         (select count(*)::int from discord_subscriptions where enabled) as enabled_subscriptions`)
     ]);
     return {

@@ -18,7 +18,7 @@
   <div class="shell">
     <aside class="rail">
       <a class="logo" href="#top"><i>↗</i><span>波段信号台<small>SWING SIGNAL DESK</small></span></a>
-      <nav><a class="active" href="#overview">总览</a><a href="#periods">周月对比</a><a href="#account">账户曲线</a><a href="#trust">可信度</a><a href="#positions">模拟持仓</a><a href="#execution">买卖流水</a><a href="#quality">数据质量</a><a href="#ledger">信号原账</a><a href="#method">计算口径</a></nav>
+      <nav><a class="active" href="#overview">总览</a><a href="#live">实时动态</a><a href="#review">待人工理解</a><a href="#periods">周月对比</a><a href="#account">账户曲线</a><a href="#trust">可信度</a><a href="#positions">模拟持仓</a><a href="#execution">买卖流水</a><a href="#quality">数据质量</a><a href="#ledger">信号原账</a><a href="#history">历史档案</a><a href="#method">计算口径</a></nav>
       <div class="connection"><span class="dot"></span><b id="connectionTitle">正在连接本地后端</b><small id="connectionDetail">检查 PostgreSQL 与长桥</small></div>
     </aside>
 
@@ -31,6 +31,22 @@
       <section id="overview" class="hero panel">
         <div><span class="section-tag">FINITE CAPITAL · 算法跟单回放</span><h2 id="growthHeadline">先用有限资金算清账户，再判断喊单质量。</h2><p>从 100 万美元现金开始，按常规仓分批、单股不超过 12%、总持仓不超过 70%，并计入滑点与费用。总览、近 7 天和近 30 天使用同一套严格口径。</p></div>
         <div class="hero-score"><span><b id="selectedPeriodName">全部数据</b> · 账户增长率</span><strong id="accountGrowth">—</strong><small id="growthFormula">等待本地回放</small></div>
+      </section>
+
+      <section id="live" class="panel live-panel">
+        <div class="panel-head live-head">
+          <div><span class="section-tag">LIVE DISCORD DESK</span><h3>实时动态</h3><p class="muted">最新在最上方；收到 5 分钟内以红色闪烁提醒。</p></div>
+          <div class="live-counters"><span>近 24 小时 <b id="recentMessageCount">—</b> 条</span><span>解析动作 <b id="recentTradeCount">—</b> 条</span><small id="liveUpdatedAt">等待数据</small></div>
+        </div>
+        <div class="live-grid">
+          <article class="stream-column"><div class="stream-title"><span>解析后的买卖与仓位</span><small>规则结果 · 不等于已真实成交</small></div><div id="latestActions" class="live-stream" aria-live="polite"><div class="empty">等待解析动作</div></div></article>
+          <article class="stream-column"><div class="stream-title"><span>最新原话</span><small>交易与非交易消息全部保留</small></div><div id="latestMessages" class="live-stream" aria-live="polite"><div class="empty">等待 Discord 原话</div></div></article>
+        </div>
+      </section>
+
+      <section id="review" class="panel review-panel">
+        <div class="panel-head"><div><span class="section-tag">HUMAN REVIEW QUEUE</span><h3>待人工理解</h3><p class="muted">点击一条可展开完整原文；“已确认”只代表人工已处理，不会自动下单，也不会删除历史。</p></div><span class="pending-count"><b id="pendingReviewCount">—</b> 条待处理</span></div>
+        <div id="reviewQueue" class="review-queue" aria-live="polite"><div class="empty">等待待办数据</div></div>
       </section>
 
       <section id="periods" class="panel period-panel">
@@ -131,12 +147,18 @@
         <div class="pager"><span id="ledgerCount">—</span><button id="showMore">再显示 50 条</button></div>
       </section>
 
+      <section id="history" class="panel history-panel">
+        <div class="panel-head"><div><span class="section-tag">HISTORY ARCHIVE</span><h3>历史消息与交易档案</h3></div><div class="filters"><button class="active" data-history-tab="messages">原始消息</button><button data-history-tab="trades">解析交易</button></div></div>
+        <div id="historyList" class="history-list"><div class="empty">正在读取历史档案</div></div>
+        <div class="pager history-pager"><button id="historyPrevious">上一页</button><span id="historyPage">—</span><button id="historyNext">下一页</button></div>
+      </section>
+
       <section id="method" class="grid equal">
         <article class="panel method"><span class="section-tag">TWO METRICS</span><h3>两种收益不要混在一起</h3><code>账户增长率 = (期末权益 − 期初资金) ÷ 期初资金</code><p>信号腿仍按“(卖出价 − 成本价) ÷ 成本价”计算，用来观察喊单方向；页面顶部的增长率则来自完整现金、仓位、滑点和费用流水。</p></article>
         <article class="panel method"><span class="section-tag">CAPITAL PLAN · V1</span><h3>有限资金跟单规则</h3><p>本金 $1,000,000；总仓位上限 70%；单标的上限 12%；常规仓按 6 批拆分，每批约占当时权益 2%。加回优先复用最近卖出数量，否则按一批计算。</p><div class="capital-bar"><i></i><span>最多部署 70% · 至少保留 30% 现金</span></div></article>
       </section>
 
-      <footer><span>本机：Discord 网关秒级接收 + 每 60 秒补漏 + 页面事件流刷新；公开页只显示脱敏快照。</span><span>history-rules-v1 · finite-capital-v1 · v0.6.0</span></footer>
+      <footer><span>本机：Discord 网关秒级接收 + 每 60 秒补漏 + 页面事件流刷新；公开页只显示脱敏快照。</span><span>history-rules-v1 · finite-capital-v1 · v0.7.0</span></footer>
     </main>
   </div>
   <button id="backToTop" class="back-to-top" aria-label="回到页面顶部" title="回到顶部">↑<span>顶部</span></button>

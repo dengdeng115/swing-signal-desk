@@ -31,6 +31,13 @@ npm run desktop:install
 
 网页同时提供 Web App Manifest 与 Service Worker。在支持 PWA 的 Edge/Chrome 中出现“安装桌面版”按钮时也可安装；Service Worker 只缓存同源静态外壳，不缓存 `/api/` 数据，实时数据始终从本机后端读取。
 
+### 实时动态、人工队列与历史档案
+
+- “实时动态”左栏显示严格规则解析后的买卖、标的、价格和仓位，右栏保留最新 Discord 原话；两栏均按消息时间倒序，5 分钟内记录闪红。
+- “近 24 小时”按当前系统时间滚动统计，不是按自然日。页面通过 SSE 即时刷新，30 秒轮询兜底，服务端仍每 60 秒补扫 Discord。
+- “待人工理解”点击条目可展开完整原文；点击“已确认”会向 `/api/messages/:messageEventId/review` 写一条只追加记录，并同时写入 `audit_events`。它只表示人工已处理，不代表解析正确，不会生成真实订单，也不会删除原文。
+- “历史档案”通过 `/api/history/messages?page=1&pageSize=20` 分页读取本机数据库；公开 GitHub Pages 不返回付费频道原文。
+
 ## PostgreSQL 初始化
 
 本机 PostgreSQL 已完成初始化。详细的角色、Navicat、迁移、验证和故障排查见 `docs/POSTGRES_SETUP.md`。不要把密码发到聊天或提交到 GitHub。

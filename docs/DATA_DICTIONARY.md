@@ -12,6 +12,7 @@ discord_subscriptions       决定监听范围
         │
         ▼
 discord_message_events      原始消息事件，只追加、不覆盖
+        ├──────────────► message_review_decisions  原话人工处理记录
         ├──────────────► strategy_trade_legs     严格历史操作腿
         │                         │
         │                         ▼
@@ -69,6 +70,7 @@ schema_migrations           记录已经执行过的数据库迁移
 | `strategy_replay_positions` | 一次回放结束时的一只模拟持仓 | 展示股数、成本、估值和浮盈亏 | 已使用 |
 | `signal_interpretations` | 一次解析结果 | 保存规则或 AI 对消息的候选理解 | 已使用 |
 | `review_decisions` | 一次人工审核动作 | 保存确认、忽略、拒绝或修改 | 已使用 |
+| `message_review_decisions` | 对一条原始消息的一次人工处理动作 | 待人工理解队列确认与忽略审计 | 已使用 |
 | `market_quotes` | 某股票在某时点的一条行情 | 区分行情时间和系统收到时间 | 等待长桥接入 |
 | `paper_orders` | 一张模拟订单 | 保存买卖意图和当时的风控快照 | 等待模拟成交模块 |
 | `paper_fills` | 一笔模拟成交 | 保存成交价、滑点、费用和延迟 | 等待模拟成交模块 |
@@ -333,6 +335,21 @@ order by created_at desc;
 | `reject` | 明确驳回错误、不安全或失效的候选 |
 | `edit` | 原解析不完全正确，人工修改后再进入后续流程 |
 
+## 8A. `message_review_decisions`：原始消息人工处理记录
+
+一行表示用户对一条无法安全解析的 Discord 原话作出一次处理决定。该表只追加，不覆盖历史；网页只读取每条消息最新的一次决定来判断它是否仍留在“待人工理解”队列。
+
+| 字段 | 类型 | 是否必填 | 含义 |
+|---|---|---:|---|
+| `id` | `uuid` | 是 | 人工处理记录唯一编号 |
+| `message_event_id` | `uuid` | 是 | 对应 `discord_message_events.id`，原始消息不会随确认被删除 |
+| `decision` | `text` | 是 | `confirm` 表示已人工处理；`ignore` 表示明确忽略 |
+| `reviewer` | `text` | 是 | 执行处理的界面或用户标识；本机网页写入 `local_dashboard` |
+| `reason` | `text` | 否 | 可选的人工作业说明，最长由 API 限制为 500 字符 |
+| `created_at` | `timestamptz` | 是 | 处理决定写入时间 |
+
+注意：这里的 `confirm` 只表示“这条原话已经由人处理过”，不等于确认某个买卖解释正确，不会自动创建 `paper_orders`。每次确认还会在 `audit_events` 追加 `message_reviewed` 事件。
+
 ## 9. `market_quotes`：行情快照
 
 一行表示一个股票在某行情时点的一条报价。未来接入长桥时，必须同时保留行情本身的时间和系统收到它的时间。
@@ -456,6 +473,7 @@ order by created_at desc;
 | `discord_history_imports.id` | `discord_message_events.history_import_id` | 一个历史回补批次包含多条原始消息 |
 | `discord_message_events.id` | `strategy_trade_legs.message_event_id` | 一条原始消息可拆成多个操作或成本批次交易腿 |
 | `signal_interpretations.id` | `review_decisions.signal_id` | 一个候选可以有多次审核记录 |
+| `discord_message_events.id` | `message_review_decisions.message_event_id` | 一条原话可以有多次只追加人工处理记录 |
 | `signal_interpretations.id` | `paper_orders.signal_id` | 一个候选可生成模拟订单；当前业务通常限制为可审计流程 |
 | `portfolios.id` | `paper_orders.portfolio_id` | 一个组合可以有多张模拟订单 |
 | `paper_orders.id` | `paper_fills.order_id` | 一张模拟订单可以有多笔模拟成交 |
@@ -696,6 +714,7 @@ union all select 'strategy_replay_snapshots', count(*) from strategy_replay_snap
 union all select 'strategy_replay_positions', count(*) from strategy_replay_positions
 union all select 'signal_interpretations', count(*) from signal_interpretations
 union all select 'review_decisions', count(*) from review_decisions
+union all select 'message_review_decisions', count(*) from message_review_decisions
 union all select 'market_quotes', count(*) from market_quotes
 union all select 'paper_orders', count(*) from paper_orders
 union all select 'paper_fills', count(*) from paper_fills

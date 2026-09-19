@@ -1,4 +1,4 @@
-const CACHE_NAME = 'swing-signal-desk-v060';
+const CACHE_NAME = 'swing-signal-desk-v070';
 const APP_SHELL = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon.svg'];
 
 self.addEventListener('install', (event) => {

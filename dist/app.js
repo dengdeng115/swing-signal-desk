@@ -1,7 +1,9 @@
 const state = {
   review: null, replay: null, filter: 'all', executionFilter: 'filled',
   visible: 50, executionVisible: 50, sort: ['closedLegs', 'desc'], chartPoints: [],
-  period: 'all', local: false, liveStarted: false, loading: false, refreshTimer: null
+  period: 'all', local: false, liveStarted: false, loading: false, refreshTimer: null,
+  liveDesk: null, historyTab: 'messages', historyPage: 1, historyPageSize: 20,
+  historyTotal: 0, historyItems: [], historyLoading: false
 };
 
 const PUBLIC_SNAPSHOT = {
@@ -253,6 +255,88 @@ function renderSymbols() {
 }
 
 function actionLabel(action) { return action === 'sell' ? '卖出' : action === 'rebuy' ? '加回' : '买入'; }
+function messageKindLabel(kind) { return kind === 'trade' ? '交易消息' : kind === 'needs_review' ? '待人工理解' : '一般言论'; }
+function isFresh(value) { const age = Date.now() - new Date(value).getTime(); return age >= 0 && age <= 5 * 60_000; }
+
+function renderLiveDesk(liveDesk) {
+  state.liveDesk = liveDesk;
+  if (!liveDesk) {
+    $('#recentMessageCount').textContent = '—'; $('#recentTradeCount').textContent = '—'; $('#pendingReviewCount').textContent = '—';
+    $('#liveUpdatedAt').textContent = '公开页不包含频道原文';
+    $('#latestActions').innerHTML = '<div class="privacy-empty">解析动作仅在本机实时版显示。</div>';
+    $('#latestMessages').innerHTML = '<div class="privacy-empty">付费频道原话不会发布到 GitHub Pages。</div>';
+    $('#reviewQueue').innerHTML = '<div class="privacy-empty">人工处理队列仅保存在本机数据库。</div>';
+    return;
+  }
+  $('#recentMessageCount').textContent = number(liveDesk.recent24hCount || 0);
+  $('#recentTradeCount').textContent = number(liveDesk.recent24hTradeCount || 0);
+  $('#pendingReviewCount').textContent = number(liveDesk.pendingReviewCount || 0);
+  $('#liveUpdatedAt').textContent = `列表更新于 ${dateTime(liveDesk.generatedAt)}`;
+  const actions = liveDesk.latestActions || [];
+  $('#latestActions').innerHTML = actions.length ? actions.map((row) => {
+    const fresh = isFresh(row.occurredAt);
+    const price = row.action === 'sell' ? row.exitPrice : row.entryPrice;
+    return `<article class="live-item ${fresh ? 'is-fresh' : ''}"><div class="live-meta"><span class="fresh-badge">5 分钟内</span><span class="side ${row.action}">${actionLabel(row.action)}</span><span class="status ${row.reviewStatus}">${reviewLabel(row)}</span><time>${dateTime(row.occurredAt)}</time></div><div class="trade-line"><h4>${escapeHtml(row.symbol)}</h4><span class="trade-price">${actionLabel(row.action)}价 ${money(price)} · 仓位 ${row.positionFraction == null ? '未说明' : `${number(row.positionFraction * 100, 1)}%`}</span></div><p>${escapeHtml(row.content)}</p></article>`;
+  }).join('') : '<div class="empty">尚无可展示的解析动作</div>';
+  const messages = liveDesk.latestMessages || [];
+  $('#latestMessages').innerHTML = messages.length ? messages.map((row) => `<article class="live-item ${isFresh(row.createdAt) ? 'is-fresh' : ''}"><div class="live-meta"><span class="fresh-badge">5 分钟内</span><span class="kind ${row.kind}">${messageKindLabel(row.kind)}</span><time>${dateTime(row.createdAt)}</time></div><p>${escapeHtml(row.content)}</p></article>`).join('') : '<div class="empty">尚无 Discord 原始消息</div>';
+  const queue = liveDesk.reviewQueue || [];
+  $('#reviewQueue').innerHTML = queue.length ? queue.map((row) => `<details class="review-item" data-review-id="${escapeHtml(row.id)}"><summary><span>${escapeHtml(row.content.replace(/\s+/g, ' ').trim())}</span><time>${dateTime(row.createdAt)}</time></summary><div class="review-body"><span class="review-reason">规则检测到交易语义，但无法安全提取唯一的标的、动作、价格或仓位。</span><p>${escapeHtml(row.content)}</p><button class="confirm-review" data-confirm-review="${escapeHtml(row.id)}">已确认</button></div></details>`).join('') : '<div class="empty">当前没有待人工理解的消息。</div>';
+}
+
+async function confirmMessageReview(messageEventId, button) {
+  button.disabled = true; button.textContent = '保存中…';
+  try {
+    const response = await fetch(`/api/messages/${encodeURIComponent(messageEventId)}/review`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'SwingSignalDesk' }, body: JSON.stringify({ decision: 'confirm' })
+    });
+    if (!response.ok) throw new Error('review failed');
+    state.liveDesk.reviewQueue = state.liveDesk.reviewQueue.filter((row) => row.id !== messageEventId);
+    state.liveDesk.pendingReviewCount = Math.max(0, Number(state.liveDesk.pendingReviewCount || 0) - 1);
+    renderLiveDesk(state.liveDesk);
+    toast('已确认；原文仍保留在历史档案和数据库审计记录中。');
+    scheduleDashboardRefresh();
+  } catch {
+    button.disabled = false; button.textContent = '已确认'; toast('保存失败，请检查本机后端连接。');
+  }
+}
+
+function renderHistory() {
+  if (!state.local) {
+    $('#historyList').innerHTML = '<div class="privacy-empty">历史原文与交易明细仅在本机实时版提供。</div>';
+    $('#historyPage').textContent = '公开页无原文'; $('#historyPrevious').disabled = true; $('#historyNext').disabled = true; return;
+  }
+  if (state.historyLoading) { $('#historyList').innerHTML = '<div class="empty">正在读取历史档案…</div>'; return; }
+  let rows; let total;
+  if (state.historyTab === 'messages') { rows = state.historyItems; total = state.historyTotal; }
+  else {
+    const all = [...(state.review?.legs || [])].sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt));
+    total = all.length; const start = (state.historyPage - 1) * state.historyPageSize; rows = all.slice(start, start + state.historyPageSize);
+  }
+  $('#historyList').innerHTML = rows.length ? rows.map((row) => {
+    if (state.historyTab === 'messages') {
+      const actions = row.actions || [];
+      return `<article class="history-row"><time>${dateTime(row.discordCreatedAt)}</time><span class="kind ${row.kind}">${messageKindLabel(row.kind)}</span><p>${escapeHtml(row.content)}</p><div class="history-actions">${actions.map((action) => `<span class="history-action">${actionLabel(action.action)} ${escapeHtml(action.symbol)}</span>`).join('')}</div></article>`;
+    }
+    return `<article class="history-row"><time>${dateTime(row.occurredAt)}</time><span class="side ${row.action}">${actionLabel(row.action)}</span><p><b class="ticker">${escapeHtml(row.symbol)}</b> · 成本 ${money(row.entryPrice)} · ${row.action === 'sell' ? `卖出 ${money(row.exitPrice)} · 收益 ${pct(row.returnPct)}` : `仓位 ${row.positionFraction == null ? '未说明' : `${number(row.positionFraction * 100, 1)}%`}`}<br>${escapeHtml(row.content)}</p><div class="history-actions"><span class="status ${row.reviewStatus}">${reviewLabel(row)}</span></div></article>`;
+  }).join('') : '<div class="empty">这一页没有记录</div>';
+  const pages = Math.max(1, Math.ceil(total / state.historyPageSize));
+  $('#historyPage').textContent = `第 ${state.historyPage} / ${pages} 页 · 共 ${number(total)} 条`;
+  $('#historyPrevious').disabled = state.historyPage <= 1;
+  $('#historyNext').disabled = state.historyPage >= pages;
+}
+
+async function loadHistory() {
+  if (!state.local || state.historyTab !== 'messages') { renderHistory(); return; }
+  state.historyLoading = true; renderHistory();
+  try {
+    const response = await fetch(`/api/history/messages?page=${state.historyPage}&pageSize=${state.historyPageSize}`, { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error('history unavailable');
+    const data = await response.json(); state.historyItems = data.items || []; state.historyTotal = Number(data.total || 0);
+  } catch { state.historyItems = []; state.historyTotal = 0; toast('历史档案暂时无法读取。'); }
+  finally { state.historyLoading = false; renderHistory(); }
+}
+
 function reviewLabel(row) { if (row.analysisIncluded) return '已纳入'; if (row.reviewStatus === 'needs_review') return '待复核'; if (row.reviewStatus === 'excluded_duplicate') return '重复排除'; return '未配对'; }
 function renderLedger() {
   let rows = state.review.legs.filter((row) => withinPeriod(row.occurredAt));
@@ -300,7 +384,7 @@ function startLiveUpdates() {
   if (state.liveStarted || !state.local) return;
   state.liveStarted = true;
   const events = new EventSource('/api/events');
-  for (const name of ['signal_candidate', 'discord_message_event', 'discord_sync_complete', 'replay_refreshed']) {
+  for (const name of ['signal_candidate', 'discord_message_event', 'discord_sync_complete', 'replay_refreshed', 'message_reviewed']) {
     events.addEventListener(name, scheduleDashboardRefresh);
   }
   events.onerror = () => { $('#connectionDetail').textContent = '数据库在线 · 实时事件流正在重连'; };
@@ -332,13 +416,15 @@ async function loadDashboard({ quiet = false } = {}) {
     $('#connectionTitle').textContent = '本地实时链路已连接';
     $('#connectionDetail').textContent = `网关秒级接收 · 60 秒补漏 · ${data.strategyReview.periods?.all?.metrics?.rawMessages || data.strategyReview.metrics.rawMessages} 条消息`;
     renderAll(data.strategyReview, data.accountReplay);
-    await loadQuotes();
+    renderLiveDesk(data.liveDesk);
+    await Promise.all([loadQuotes(), loadHistory()]);
     if (!state.liveStarted) { startLiveUpdates(); setTimeout(() => scanDiscord(), 100); }
   } catch {
     state.local = false;
     $('#connectionTitle').textContent = '公开聚合快照';
     $('#connectionDetail').textContent = '曲线可看 · 原文与逐笔保持私密';
     renderAll(PUBLIC_SNAPSHOT, PUBLIC_REPLAY);
+    renderLiveDesk(null); renderHistory();
     $('#quoteList').innerHTML = '<div class="empty">长桥实时行情仅在本地服务提供。</div>';
     if (!quiet) toast('当前显示公开聚合回放；逐笔买卖与频道原文未公开。');
   } finally {
@@ -364,9 +450,17 @@ document.querySelectorAll('[data-period]').forEach((button) => button.addEventLi
 }));
 $('#symbolTable thead').addEventListener('click', (event) => { const th = event.target.closest('[data-sort]'); if (!th || !state.review) return; state.sort = state.sort[0] === th.dataset.sort ? [th.dataset.sort, state.sort[1] === 'asc' ? 'desc' : 'asc'] : [th.dataset.sort, 'desc']; renderSymbols(); });
 $('#ledgerRows').addEventListener('click', (event) => { const button = event.target.closest('[data-message]'); if (button) toast(button.dataset.message); });
+$('#reviewQueue').addEventListener('click', (event) => { const button = event.target.closest('[data-confirm-review]'); if (button) confirmMessageReview(button.dataset.confirmReview, button); });
+document.querySelectorAll('[data-history-tab]').forEach((button) => button.addEventListener('click', () => {
+  document.querySelectorAll('[data-history-tab]').forEach((item) => item.classList.remove('active')); button.classList.add('active');
+  state.historyTab = button.dataset.historyTab; state.historyPage = 1; loadHistory();
+}));
+$('#historyPrevious').addEventListener('click', () => { if (state.historyPage > 1) { state.historyPage -= 1; loadHistory(); } });
+$('#historyNext').addEventListener('click', () => { state.historyPage += 1; loadHistory(); });
 $('#equityChart').addEventListener('mousemove', handleChartMove);
 $('#equityChart').addEventListener('mouseleave', () => { $('#chartCursor')?.setAttribute('visibility', 'hidden'); $('#chartCursorPoint')?.setAttribute('visibility', 'hidden'); $('#chartTooltip').hidden = true; });
 const navLinks = [...document.querySelectorAll('.rail nav a')];
+let lockedNavigationId = window.location.hash.slice(1) || null;
 function setActiveNavigation(id) {
   navLinks.forEach((link) => {
     const active = link.getAttribute('href') === `#${id}`;
@@ -377,7 +471,7 @@ function setActiveNavigation(id) {
     } else link.removeAttribute('aria-current');
   });
 }
-navLinks.forEach((link) => link.addEventListener('click', () => setActiveNavigation(link.hash.slice(1))));
+navLinks.forEach((link) => link.addEventListener('click', () => { lockedNavigationId = link.hash.slice(1); setActiveNavigation(lockedNavigationId); }));
 
 const observedSections = navLinks.map((link) => document.querySelector(link.hash)).filter(Boolean);
 const backToTop = $('#backToTop');
@@ -386,8 +480,12 @@ function updateScrollNavigation() {
   const lastSection = observedSections.at(-1);
   const lastSectionIsReading = lastSection && lastSection.getBoundingClientRect().top <= window.innerHeight * 0.72;
   let current = observedSections[0];
-  if (atPageEnd || lastSectionIsReading) current = lastSection;
+  const lockedSection = lockedNavigationId ? document.getElementById(lockedNavigationId) : null;
+  const lockedRect = lockedSection?.getBoundingClientRect();
+  if (lockedSection && lockedRect.bottom > 55 && lockedRect.top < window.innerHeight * 0.82) current = lockedSection;
+  else if (atPageEnd || lastSectionIsReading) { lockedNavigationId = null; current = lastSection; }
   else {
+    lockedNavigationId = null;
     const readingLine = window.innerHeight * 0.28;
     observedSections.forEach((section) => {
       if (section.getBoundingClientRect().top <= readingLine) current = section;

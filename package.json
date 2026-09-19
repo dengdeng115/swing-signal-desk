@@ -1,6 +1,6 @@
 {
   "name": "swing-signal-desk",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "description": "Discord swing signal recorder, parser and paper-trading workbench",
