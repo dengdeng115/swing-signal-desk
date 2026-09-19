@@ -54,6 +54,7 @@ test('uses a fresh Longbridge mark for an open position', () => {
   assert.equal(result.positions[0].markSource, 'longbridge');
   assert.equal(result.positions[0].markPrice, 110);
   assert.ok(result.summary.unrealizedPnl > 0);
+  assert.equal(Object.hasOwn(result.assumptions, 'finalQuotes'), false);
 });
 
 test('keeps immediate duplicates out but treats a long-gap repeat as a new signal', () => {
@@ -66,4 +67,19 @@ test('keeps immediate duplicates out but treats a long-gap repeat as a new signa
 
   assert.equal(result.summary.filledBuys, 2);
   assert.equal(result.summary.skippedReview, 1);
+});
+
+test('shows the account return sensitivity to worse execution costs', () => {
+  const rows = [
+    row({ action: 'buy', symbol: 'NVDA', entryPrice: 210, positionFraction: 1 / 6 }),
+    row({ action: 'sell', symbol: 'NVDA', entryPrice: 210, exitPrice: 220, positionFraction: 1, occurredAt: '2026-09-02T14:00:00Z', content: '220 全部卖出 210 的 NVDA' })
+  ];
+  const lowCost = replayPortfolio(rows, { slippageBps: 5, feeBps: 1 });
+  const base = replayPortfolio(rows, { slippageBps: 10, feeBps: 2 });
+  const stressed = replayPortfolio(rows, { slippageBps: 30, feeBps: 5 });
+
+  assert.ok(lowCost.summary.totalReturnPct > base.summary.totalReturnPct);
+  assert.ok(base.summary.totalReturnPct > stressed.summary.totalReturnPct);
+  assert.ok(lowCost.summary.totalFees < base.summary.totalFees);
+  assert.ok(base.summary.totalFees < stressed.summary.totalFees);
 });

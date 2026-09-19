@@ -34,10 +34,21 @@ export class MemoryRepository {
   async getPortfolio() { return clone(this.state.portfolio); }
 
   async recordMessage(event) {
+    if (event.eventType === 'create' && event.messageId) {
+      const existing = this.state.messages.find((item) => item.eventType === 'create' && item.messageId === event.messageId);
+      if (existing) return { ...clone(existing), isNew: false };
+    }
     const record = { id: crypto.randomUUID(), recordedAt: new Date().toISOString(), ...event };
     this.state.messages.push(record);
-    return clone(record);
+    return { ...clone(record), isNew: true };
   }
+
+  async latestDiscordMessageId({ guildId, channelId }) {
+    return this.state.messages.filter((item) => item.eventType === 'create' && item.guildId === guildId && item.channelId === channelId)
+      .sort((a, b) => new Date(b.discordCreatedAt) - new Date(a.discordCreatedAt))[0]?.messageId || null;
+  }
+
+  async recordStrategyLegs() { return { inserted: 0, unresolvedReason: null }; }
 
   async recordSignal(signal) {
     const record = { id: crypto.randomUUID(), status: 'pending_review', createdAt: new Date().toISOString(), ...signal };

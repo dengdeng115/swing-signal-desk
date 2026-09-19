@@ -43,3 +43,20 @@ test('market quote endpoint uses the injected read-only quote service', async ()
   assert.equal(response.body.source, 'longbridge');
   assert.equal(response.body.quotes[0].last, 220);
 });
+
+test('Discord catch-up endpoint is explicit when the bot is unavailable', async () => {
+  const response = await request(createApp({ config, repository: new MemoryRepository() }))
+    .post('/api/discord/sync');
+  assert.equal(response.status, 503);
+  assert.equal(response.body.error, 'discord_sync_unavailable');
+});
+
+test('message create ingestion is idempotent during catch-up', async () => {
+  const repository = new MemoryRepository();
+  const event = { messageId: 'discord-1', eventType: 'create', guildId: 'g', channelId: 'c', content: 'hello', discordCreatedAt: '2026-09-19T00:00:00Z' };
+  const first = await repository.recordMessage(event);
+  const second = await repository.recordMessage(event);
+  assert.equal(first.isNew, true);
+  assert.equal(second.isNew, false);
+  assert.equal((await repository.dashboard()).messages.length, 1);
+});

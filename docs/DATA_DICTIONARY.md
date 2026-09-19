@@ -78,6 +78,8 @@ schema_migrations           记录已经执行过的数据库迁移
 
 部分表现在为空是正常的：历史回放使用独立的 `strategy_replay_*` 表，不等同于经过人工确认的前向模拟订单。因此 `market_quotes`、`paper_orders`、`paper_fills`、`position_snapshots` 仍可能没有记录。
 
+网页的“全部 / 近 7 天 / 近 30 天”不是三套表。它们都是对上述原始消息、策略腿和最近一个回放版本按同一截止时点做的只读聚合；切换周期不会复制或修改任何数据库记录。
+
 ## 4. `portfolios`：模拟组合
 
 一行表示一个模拟资金账户。当前默认组合初始资金为 1,000,000 USD。
@@ -189,8 +191,18 @@ schema_migrations           记录已经执行过的数据库迁移
 | `max_drawdown_pct` | `numeric(20,8)` | 否 | 事件时点权益相对此前峰值的最大跌幅 |
 | `peak_utilization_pct` | `numeric(20,8)` | 否 | 回放中实际最高持仓市值/权益；价格上涨后可略高于买入时上限 |
 | `assumptions` | `jsonb` | 是 | 资金、仓位、滑点、费用、去重和匹配容差的完整快照 |
-| `metrics` | `jsonb` | 是 | 成交数、跳过数、费用和报价成功数等扩展指标 |
+| `metrics` | `jsonb` | 是 | 成交数、跳过数、费用、报价覆盖、卖单匹配率和成本压力情景等扩展指标 |
 | `created_at` / `completed_at` | `timestamptz` | 是/否 | 回放创建与完成时间 |
+
+`metrics` 当前重点字段：
+
+| JSON 字段 | 含义 |
+|---|---|
+| `filledBuys` / `filledSells` | 实际进入模拟账户的买入和卖出次数 |
+| `skippedUnmatched` | 窗口内找不到对应买入批次的卖单数；不虚构期初仓位 |
+| `matchedSellRatePct` | `filledSells / (filledSells + skippedUnmatched) × 100`，用于提示窗口覆盖偏差，不是解析准确率 |
+| `longbridgeMarks` / `quoteCoveragePct` | 期末由长桥报价覆盖的未平仓标的数及覆盖比例 |
+| `scenarios` | 同一信号与仓位下三档滑点/费用的期末权益、收益率、最大回撤和总费用；是敏感度测试，不是置信区间 |
 
 ## 6D. `strategy_replay_events`：逐笔回放处理
 

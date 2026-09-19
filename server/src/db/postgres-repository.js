@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { normalizeZhaoMessage, parseHistoricalTradeMessage } from '../core/historical-trade-parser.js';
 
 const nullableNumber = (value) => value == null ? null : Number(value);
 const iso = (value) => value == null ? null : new Date(value).toISOString();
@@ -87,9 +88,13 @@ function mapPostgresAudit(row) {
   };
 }
 
-function buildStrategyReview(importRow, legRows, dailyRows) {
-  if (!importRow) return null;
+function summarizeLegRows(legRows) {
   const included = legRows.filter((row) => row.analysis_included);
+  const wins = included.filter((row) => row.outcome === 'win').length;
+  const losses = included.filter((row) => row.outcome === 'loss').length;
+  const flats = included.filter((row) => row.outcome === 'flat').length;
+  const returns = included.map((row) => Number(row.gross_return_pct)).sort((a, b) => a - b);
+  const median = returns.length ? (returns[Math.floor((returns.length - 1) / 2)] + returns[Math.ceil((returns.length - 1) / 2)]) / 2 : null;
   const bySymbolMap = new Map();
   for (const row of included) {
     const item = bySymbolMap.get(row.symbol) || { symbol: row.symbol, closedLegs: 0, wins: 0, losses: 0, flats: 0, returns: [] };
@@ -111,21 +116,66 @@ function buildStrategyReview(importRow, legRows, dailyRows) {
   })).sort((a, b) => b.closedLegs - a.closedLegs || b.winRatePct - a.winRatePct);
 
   return {
-    mode: 'historical_backfill',
+    closedLegs: included.length,
+    wins,
+    losses,
+    flats,
+    winRatePct: included.length ? Number((wins / included.length * 100).toFixed(2)) : null,
+    medianReturnPct: median == null ? null : Number(median.toFixed(4)),
+    averageReturnPct: returns.length ? Number((returns.reduce((sum, value) => sum + value, 0) / returns.length).toFixed(4)) : null,
+    bySymbol
+  };
+}
+
+function buildStrategyReview(importRow, legRows, dailyRows, rawRows) {
+  if (!importRow) return null;
+  const timestamps = rawRows.map((row) => new Date(row.discord_created_at).getTime()).filter(Number.isFinite);
+  // Anchor rolling windows to the newest captured message so signal KPIs and
+  // account replay use the same data cut, even when the market is quiet.
+  const anchor = new Date(Math.max(
+    new Date(importRow.period_end).getTime(),
+    ...(timestamps.length ? timestamps : [0])
+  ));
+  const definitions = {
+    all: { label: '全部数据', start: new Date(importRow.period_start) },
+    week: { label: '近 7 天', start: new Date(anchor.getTime() - 7 * 86400_000) },
+    month: { label: '近 30 天', start: new Date(anchor.getTime() - 30 * 86400_000) }
+  };
+  const periods = Object.fromEntries(Object.entries(definitions).map(([key, definition]) => {
+    const selectedLegs = legRows.filter((row) => new Date(row.occurred_at) >= definition.start && new Date(row.occurred_at) <= anchor);
+    const selectedMessages = rawRows.filter((row) => new Date(row.discord_created_at) >= definition.start && new Date(row.discord_created_at) <= anchor);
+    const strict = summarizeLegRows(selectedLegs);
+    const { bySymbol, ...strictMetrics } = strict;
+    const unresolvedTradeLike = selectedMessages.filter((row) => parseHistoricalTradeMessage(row.content).unresolvedReason === 'trade_like_but_not_strict').length;
+    return [key, {
+      key,
+      label: definition.label,
+      periodStart: definition.start.toISOString(),
+      periodEnd: anchor.toISOString(),
+      metrics: { ...strictMetrics, rawMessages: selectedMessages.length, parsedEvents: selectedLegs.length, tradeLikeUnresolved: unresolvedTradeLike },
+      coverage: {
+        rawMessages: selectedMessages.length,
+        parsedEvents: selectedLegs.length,
+        includedClosedLegs: strict.closedLegs,
+        unresolvedTradeLike,
+        duplicatesExcluded: selectedLegs.filter((row) => row.review_status === 'excluded_duplicate').length,
+        needsReview: selectedLegs.filter((row) => row.review_status === 'needs_review').length
+      },
+      bySymbol
+    }];
+  }));
+  const month = periods.month;
+
+  return {
+    mode: 'historical_plus_realtime',
     importId: importRow.id,
-    periodStart: iso(importRow.period_start),
-    periodEnd: iso(importRow.period_end),
+    periodStart: month.periodStart,
+    periodEnd: month.periodEnd,
     completedAt: iso(importRow.completed_at),
-    metrics: importRow.details || {},
-    coverage: {
-      rawMessages: Number(importRow.fetched_count),
-      parsedEvents: Number(importRow.details?.parsedEvents || 0),
-      includedClosedLegs: included.length,
-      unresolvedTradeLike: Number(importRow.details?.tradeLikeUnresolved || 0),
-      duplicatesExcluded: Number(importRow.details?.duplicateEvents || 0),
-      needsReview: Number(importRow.details?.needsReview || 0)
-    },
-    bySymbol,
+    metrics: month.metrics,
+    coverage: month.coverage,
+    periods,
+    bySymbol: month.bySymbol,
     dailyActivity: dailyRows.map((row) => ({ date: row.day, messages: Number(row.message_count) })),
     legs: legRows.map((row) => ({
       id: row.id,
@@ -146,6 +196,45 @@ function buildStrategyReview(importRow, legRows, dailyRows) {
   };
 }
 
+function buildReplayPeriods(run, snapshotRows, eventRows) {
+  if (!snapshotRows.length) return {};
+  const anchor = new Date(run.period_end);
+  const definitions = {
+    all: { label: '全部数据', start: new Date(run.period_start) },
+    week: { label: '近 7 天', start: new Date(anchor.getTime() - 7 * 86400_000) },
+    month: { label: '近 30 天', start: new Date(anchor.getTime() - 30 * 86400_000) }
+  };
+  return Object.fromEntries(Object.entries(definitions).map(([key, definition]) => {
+    const before = snapshotRows.filter((row) => new Date(row.occurred_at) < definition.start).at(-1) || snapshotRows[0];
+    const selected = snapshotRows.filter((row) => new Date(row.occurred_at) >= definition.start);
+    const curve = [before, ...selected.filter((row) => row.id !== before.id)];
+    const baseline = Number(curve[0].equity);
+    const final = Number(curve.at(-1).equity);
+    let peak = baseline;
+    let maxDrawdownPct = 0;
+    for (const point of curve) {
+      const equity = Number(point.equity);
+      peak = Math.max(peak, equity);
+      maxDrawdownPct = Math.min(maxDrawdownPct, (equity / peak - 1) * 100);
+    }
+    const events = eventRows.filter((row) => new Date(row.occurred_at) >= definition.start);
+    return [key, {
+      key,
+      label: definition.label,
+      periodStart: definition.start.toISOString(),
+      periodEnd: anchor.toISOString(),
+      startEquity: baseline,
+      finalEquity: final,
+      totalReturnPct: (final / baseline - 1) * 100,
+      maxDrawdownPct,
+      realizedPnl: events.filter((row) => row.side === 'sell' && row.status === 'filled').reduce((sum, row) => sum + Number(row.realized_pnl), 0),
+      filledBuys: events.filter((row) => row.side === 'buy' && row.status === 'filled').length,
+      filledSells: events.filter((row) => row.side === 'sell' && row.status === 'filled').length,
+      skippedUnmatched: events.filter((row) => row.status === 'skipped_unmatched').length
+    }];
+  }));
+}
+
 function mapAccountReplay(run, eventRows, snapshotRows, positionRows) {
   if (!run) return null;
   return {
@@ -155,6 +244,7 @@ function mapAccountReplay(run, eventRows, snapshotRows, positionRows) {
     periodStart: iso(run.period_start),
     periodEnd: iso(run.period_end),
     completedAt: iso(run.completed_at),
+    periods: buildReplayPeriods(run, snapshotRows, eventRows),
     assumptions: run.assumptions || {},
     summary: {
       initialCapital: Number(run.initial_capital),
@@ -220,7 +310,7 @@ export class PostgresRepository {
   }
 
   async dashboard() {
-    const [portfolio, positions, messages, signals, audit, historyImport, strategyLegs, dailyActivity, replayRun] = await Promise.all([
+    const [portfolio, positions, messages, signals, audit, historyImport, strategyLegs, dailyActivity, replayRun, rawStrategyMessages] = await Promise.all([
       this.pool.query('select * from portfolios order by created_at limit 1'),
       this.pool.query('select distinct on (symbol) * from position_snapshots order by symbol, captured_at desc'),
       this.pool.query('select * from discord_message_events order by received_at desc limit 50'),
@@ -228,11 +318,24 @@ export class PostgresRepository {
       this.pool.query('select * from audit_events order by created_at desc limit 50'),
       this.pool.query("select * from discord_history_imports where status='completed' order by completed_at desc limit 1"),
       this.pool.query(`select l.*, m.content from strategy_trade_legs l join discord_message_events m on m.id=l.message_event_id
-        order by l.occurred_at desc, l.leg_index asc limit 600`),
+        where (m.channel_id,m.author_id)=(select channel_id,author_id from discord_message_events
+          where history_import_id=(select id from discord_history_imports where status='completed' order by completed_at desc limit 1)
+          group by channel_id,author_id order by count(*) desc limit 1)
+        order by l.occurred_at desc, l.leg_index asc`),
       this.pool.query(`select to_char(discord_created_at at time zone 'Asia/Shanghai','YYYY-MM-DD') as day, count(*) as message_count
-        from discord_message_events where ingestion_mode='historical_backfill'
+        from discord_message_events where event_type='create' and ingestion_mode<>'manual_test'
+          and (channel_id,author_id)=(select channel_id,author_id from discord_message_events
+            where history_import_id=(select id from discord_history_imports where status='completed' order by completed_at desc limit 1)
+            group by channel_id,author_id order by count(*) desc limit 1)
+          and discord_created_at >= now() - interval '30 days'
         group by 1 order by 1`),
-      this.pool.query("select * from strategy_replay_runs where status='completed' order by completed_at desc limit 1")
+      this.pool.query("select * from strategy_replay_runs where status='completed' order by completed_at desc limit 1"),
+      this.pool.query(`select discord_message_id, content, discord_created_at
+        from discord_message_events where event_type='create' and ingestion_mode<>'manual_test'
+          and (channel_id,author_id)=(select channel_id,author_id from discord_message_events
+            where history_import_id=(select id from discord_history_imports where status='completed' order by completed_at desc limit 1)
+            group by channel_id,author_id order by count(*) desc limit 1)
+        order by discord_created_at`)
     ]);
     const latestRun = replayRun.rows[0];
     const [replayEvents, replaySnapshots, replayPositions] = latestRun ? await Promise.all([
@@ -247,7 +350,7 @@ export class PostgresRepository {
       messages: messages.rows.map(mapPostgresMessage),
       signals: signals.rows.map(mapPostgresSignal),
       audit: audit.rows.map(mapPostgresAudit),
-      strategyReview: buildStrategyReview(historyImport.rows[0], strategyLegs.rows, dailyActivity.rows),
+      strategyReview: buildStrategyReview(historyImport.rows[0], strategyLegs.rows, dailyActivity.rows, rawStrategyMessages.rows),
       accountReplay: mapAccountReplay(latestRun, replayEvents.rows, replaySnapshots.rows, replayPositions.rows)
     };
   }
@@ -268,11 +371,60 @@ export class PostgresRepository {
     const result = await this.pool.query(
       `insert into discord_message_events
        (discord_message_id, event_type, guild_id, channel_id, author_id, content, discord_created_at, received_at, raw_payload)
-       values ($1,$2,$3,$4,$5,$6,$7,now(),$8) returning *`,
+       values ($1,$2,$3,$4,$5,$6,$7,now(),$8)
+       on conflict (discord_message_id) where event_type='create' and discord_message_id is not null do nothing
+       returning *`,
       [event.messageId, event.eventType, event.guildId, event.channelId, event.authorId, event.content,
         event.discordCreatedAt, event.rawPayload || {}]
     );
-    return mapPostgresMessage(result.rows[0]);
+    if (result.rowCount) return { ...mapPostgresMessage(result.rows[0]), isNew: true };
+    const existing = await this.pool.query(
+      "select * from discord_message_events where discord_message_id=$1 and event_type='create' limit 1",
+      [event.messageId]
+    );
+    return { ...mapPostgresMessage(existing.rows[0]), isNew: false };
+  }
+
+  async latestDiscordMessageId({ guildId, channelId }) {
+    const result = await this.pool.query(
+      `select discord_message_id from discord_message_events
+       where event_type='create' and guild_id=$1 and channel_id=$2 and discord_message_id is not null
+       order by discord_created_at desc limit 1`,
+      [guildId, channelId]
+    );
+    return result.rows[0]?.discord_message_id || null;
+  }
+
+  async recordStrategyLegs(messageEvent) {
+    const parsed = parseHistoricalTradeMessage(messageEvent.content);
+    if (!parsed.events.length) return { inserted: 0, unresolvedReason: parsed.unresolvedReason };
+    const recent = await this.pool.query(
+      `select discord_message_id, content from discord_message_events
+       where event_type='create' and guild_id=$1 and channel_id=$2 and author_id=$3
+         and id<>$4 and discord_created_at <= $5
+       order by discord_created_at desc limit 5000`,
+      [messageEvent.guildId, messageEvent.channelId, messageEvent.authorId, messageEvent.id, messageEvent.discordCreatedAt]
+    );
+    const duplicate = recent.rows.find((row) => normalizeZhaoMessage(row.content) === parsed.normalizedText);
+    let inserted = 0;
+    for (const [legIndex, event] of parsed.events.entries()) {
+      const reviewStatus = duplicate ? 'excluded_duplicate' : event.reviewStatus;
+      const analysisIncluded = event.closedLeg && !duplicate && reviewStatus === 'auto_included';
+      const result = await this.pool.query(
+        `insert into strategy_trade_legs
+         (message_event_id,leg_index,parser_version,extraction_method,action,symbol,entry_price,exit_price,
+          position_fraction,is_closed_leg,gross_return_pct,outcome,confidence,review_status,analysis_included,
+          duplicate_of_message_id,notes,occurred_at)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+         on conflict (message_event_id,leg_index,parser_version) do nothing`,
+        [messageEvent.id, legIndex, event.parserVersion, event.extractionMethod, event.action, event.symbol,
+          event.entryPrice, event.exitPrice, event.positionFraction, event.closedLeg, event.grossReturnPct, event.outcome,
+          event.confidence, reviewStatus, analysisIncluded, duplicate?.discord_message_id || null, event.notes,
+          messageEvent.discordCreatedAt]
+      );
+      inserted += result.rowCount;
+    }
+    return { inserted, unresolvedReason: null, duplicateOf: duplicate?.discord_message_id || null };
   }
 
   async recordSignal(signal) {

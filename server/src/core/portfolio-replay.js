@@ -224,7 +224,7 @@ export function replayPortfolio(inputRows, overrides = {}) {
   const filled = events.filter((event) => event.status === 'filled');
   return {
     strategyVersion: 'finite-capital-v1',
-    assumptions: config,
+    assumptions: Object.fromEntries(Object.keys(DEFAULTS).map((key) => [key, config[key]])),
     summary: {
       initialCapital: config.initialCapital,
       finalEquity: final.equity,

@@ -1,6 +1,6 @@
 {
   "name": "swing-signal-desk",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "Discord swing signal recorder, parser and paper-trading workbench",
@@ -12,7 +12,9 @@
     "db:verify": "node server/scripts/verify-database.js",
     "db:backup": "node server/scripts/backup-database.js",
     "db:import-history": "node server/scripts/import-discord-history.js",
-    "db:replay": "node server/scripts/run-portfolio-replay.js"
+    "db:replay": "node server/scripts/run-portfolio-replay.js",
+    "service:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-startup-task.ps1",
+    "service:status": "powershell -NoProfile -Command \"Get-ScheduledTask -TaskName 'Swing Signal Desk' | Select-Object TaskName,State\""
   },
   "engines": {
     "node": ">=22"

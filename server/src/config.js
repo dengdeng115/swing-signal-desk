@@ -40,7 +40,10 @@ export function loadConfig() {
       guildId: process.env.DISCORD_GUILD_ID || '',
       channelIds: (process.env.DISCORD_CHANNEL_IDS || '').split(',').map((x) => x.trim()).filter(Boolean),
       authorIds: (process.env.DISCORD_AUTHOR_IDS || '').split(',').map((x) => x.trim()).filter(Boolean),
-      subscriptions: discordSubscriptionsFromEnv()
+      subscriptions: discordSubscriptionsFromEnv(),
+      catchupIntervalSeconds: numberFromEnv('DISCORD_CATCHUP_INTERVAL_SECONDS', 60),
+      catchupMinGapSeconds: numberFromEnv('DISCORD_CATCHUP_MIN_GAP_SECONDS', 30),
+      catchupMaxMessages: numberFromEnv('DISCORD_CATCHUP_MAX_MESSAGES', 1000)
     },
     ai: {
       enabled: booleanFromEnv('AI_ENABLED'),

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#071117">
   <meta name="description" content="Discord 美股波段消息的有限资金模拟跟单、账户增长曲线与一月审计工作台">
-  <title>波段信号台 · 有限资金跟单</title>
+  <title>波段信号台 · 实时跟单总览</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -13,22 +13,32 @@
   <div class="shell">
     <aside class="rail">
       <a class="logo" href="#top"><i>↗</i><span>波段信号台<small>SWING SIGNAL DESK</small></span></a>
-      <nav><a class="active" href="#overview">总览</a><a href="#account">账户曲线</a><a href="#positions">模拟持仓</a><a href="#execution">买卖流水</a><a href="#quality">数据质量</a><a href="#ledger">信号原账</a><a href="#method">计算口径</a></nav>
+      <nav><a class="active" href="#overview">总览</a><a href="#periods">周月对比</a><a href="#account">账户曲线</a><a href="#trust">可信度</a><a href="#positions">模拟持仓</a><a href="#execution">买卖流水</a><a href="#quality">数据质量</a><a href="#ledger">信号原账</a><a href="#method">计算口径</a></nav>
       <div class="connection"><span class="dot"></span><b id="connectionTitle">正在连接本地后端</b><small id="connectionDetail">检查 PostgreSQL 与长桥</small></div>
     </aside>
 
     <main id="top">
       <header class="topbar">
-        <div><p class="eyebrow">MIDO · 30-DAY SIGNAL AUDIT</p><h1>咪哆波段 · 一月跟单复盘</h1><p id="periodText" class="sub">正在读取时间范围…</p></div>
-        <div class="header-actions"><span class="pill paper">PAPER ONLY</span><button id="refreshButton">刷新数据</button></div>
+        <div><p class="eyebrow">MIDO · LIVE PAPER FOLLOW DESK</p><h1>咪哆波段 · 跟单总览</h1><p id="periodText" class="sub">正在读取时间范围…</p></div>
+        <div class="header-actions"><span class="pill live-pill"><i></i>实时监听</span><span class="pill paper">PAPER ONLY</span><button id="refreshButton">扫描并刷新</button></div>
       </header>
 
       <section id="overview" class="hero panel">
-        <div><span class="section-tag">FINITE CAPITAL · 算法跟单回放</span><h2 id="growthHeadline">先用有限资金算清账户，再判断喊单质量。</h2><p>从 100 万美元现金开始，按常规仓分批、单股不超过 12%、总持仓不超过 70%，并计入滑点与费用。找不到本月买入批次的卖单不会凭空补仓。</p></div>
-        <div class="hero-score"><span>跟单账户增长率</span><strong id="accountGrowth">—</strong><small id="growthFormula">等待本地回放</small></div>
+        <div><span class="section-tag">FINITE CAPITAL · 算法跟单回放</span><h2 id="growthHeadline">先用有限资金算清账户，再判断喊单质量。</h2><p>从 100 万美元现金开始，按常规仓分批、单股不超过 12%、总持仓不超过 70%，并计入滑点与费用。总览、近 7 天和近 30 天使用同一套严格口径。</p></div>
+        <div class="hero-score"><span><b id="selectedPeriodName">全部数据</b> · 账户增长率</span><strong id="accountGrowth">—</strong><small id="growthFormula">等待本地回放</small></div>
       </section>
 
-      <section class="kpis" aria-label="月度关键指标">
+      <section id="periods" class="panel period-panel">
+        <div class="panel-head"><div><span class="section-tag">PERIOD LENSES</span><h3>总览 / 周 / 月</h3></div><span class="muted">点击子板块切换下方全部图表和明细</span></div>
+        <div class="period-cards">
+          <button class="period-card active" data-period="all"><span>总览</span><strong id="allWinRate">—</strong><small>严格胜率</small><em id="allReturn">账户 —</em><i id="allTrades">—</i></button>
+          <button class="period-card" data-period="week"><span>近 7 天</span><strong id="weekWinRate">—</strong><small>严格胜率</small><em id="weekReturn">账户 —</em><i id="weekTrades">—</i></button>
+          <button class="period-card" data-period="month"><span>近 30 天</span><strong id="monthWinRate">—</strong><small>严格胜率</small><em id="monthReturn">账户 —</em><i id="monthTrades">—</i></button>
+        </div>
+        <p class="footnote">“总览”覆盖数据库当前已纳入的完整历史；周/月为滚动 7/30 天。切换后胜率、收益曲线、按标的拆解、流水和原账会一起变化。</p>
+      </section>
+
+      <section class="kpis" aria-label="当前周期关键指标">
         <article class="panel kpi mint"><span>期末模拟权益</span><strong id="finalEquity">—</strong><small>现金 + 未平仓市值</small></article>
         <article class="panel kpi cyan"><span>已实现盈亏</span><strong id="realizedPnl">—</strong><small>已卖出且可匹配批次</small></article>
         <article class="panel kpi gold"><span>严格信号胜率</span><strong id="winRate">—</strong><small id="winFormula">信号层，不等于账户收益</small></article>
@@ -53,6 +63,24 @@
         <p class="footnote">曲线在每条喊单发生时重新估值；两条消息之间沿用该标的最近一次信号价。最后一点用长桥当前报价标记未平仓持仓，因此是可审计估算，不是券商真实成交记录。</p>
       </section>
 
+      <section id="trust" class="grid trust-grid">
+        <article class="panel trust-card">
+          <div class="panel-head"><div><span class="section-tag">EVIDENCE QUALITY</span><h3>结果可信度</h3></div><span class="pill caution">有窗口偏差</span></div>
+          <div class="trust-metrics">
+            <div><span>卖单可匹配率</span><strong id="matchedSellRate">—</strong><em><i id="matchedSellBar"></i></em><small id="matchedSellDetail">等待回放</small></div>
+            <div><span>持仓报价覆盖</span><strong id="quoteCoverage">—</strong><em><i id="quoteCoverageBar"></i></em><small id="quoteCoverageDetail">等待估值</small></div>
+            <div><span>待人工理解</span><strong id="unresolvedCount">—</strong><em><i class="warn" id="unresolvedBar"></i></em><small>不进入自动模拟</small></div>
+          </div>
+          <p class="trust-warning"><b>为什么胜率不是解析准确率？</b> 胜率只统计当前周期内有明确进出价格的交易腿；窗口开始前的遗留仓位卖出无法匹配且被排除，可能抬高或压低回放收益。页面因此单列覆盖率，不合成一个容易误导的总评分。</p>
+          <div class="run-meta"><span>模型 <b id="modelVersion">—</b></span><span>最近回放 <b id="replayTime">—</b></span><span class="forward-badge">历史回放 ≠ 实时前向跟单</span></div>
+        </article>
+        <article class="panel scenario-card">
+          <div class="panel-head"><div><span class="section-tag">EXECUTION STRESS</span><h3>完整历史成交成本压力测试</h3></div><span class="muted">不随周/月切换 · 同一批信号与仓位</span></div>
+          <div id="scenarioList" class="scenario-list"><div class="empty">等待压力测试结果</div></div>
+          <p class="footnote">仅改变每边滑点与费用，用于观察成交延迟和成本敏感度；这不是收益预测区间，也没有假设能在喊单价瞬间成交。</p>
+        </article>
+      </section>
+
       <section class="grid wide-left">
         <article class="panel activity-card">
           <div class="panel-head"><div><span class="section-tag">MESSAGE RHYTHM</span><h3>每日消息活跃度</h3></div><span class="muted">北京时间</span></div>
@@ -71,7 +99,7 @@
       </section>
 
       <section id="execution" class="panel table-panel">
-        <div class="panel-head"><div><span class="section-tag">FOLLOW LEDGER</span><h3>算法跟单买卖流水</h3></div><div class="filters"><button class="active" data-execution-filter="filled">已模拟</button><button data-execution-filter="buy">买入</button><button data-execution-filter="sell">卖出</button><button data-execution-filter="skipped">跳过</button></div></div>
+        <div class="panel-head"><div><span class="section-tag">FOLLOW LEDGER</span><h3>算法跟单买卖流水</h3></div><div class="execution-tools"><div class="filters"><button class="active" data-execution-filter="filled">已模拟</button><button data-execution-filter="buy">买入</button><button data-execution-filter="sell">卖出</button><button data-execution-filter="skipped">跳过</button></div><button id="exportExecution" class="export-button">导出全部 CSV</button></div></div>
         <div class="table-wrap"><table><thead><tr><th>时间</th><th>动作</th><th>标的</th><th>股数</th><th>信号价</th><th>模拟成交价</th><th>费用</th><th>已实现盈亏</th><th>账户权益</th><th>处理结果</th></tr></thead><tbody id="executionRows"></tbody></table></div>
         <div class="pager"><span id="executionCount">—</span><button id="showMoreExecution">再显示 50 条</button></div>
       </section>
@@ -93,7 +121,7 @@
       </section>
 
       <section id="ledger" class="panel table-panel">
-        <div class="panel-head"><div><span class="section-tag">AUDIT LEDGER</span><h3>近一个月操作记录</h3></div><div class="filters"><button class="active" data-filter="all">全部</button><button data-filter="sell">已卖出</button><button data-filter="buy">买入/加回</button><button data-filter="review">待复核</button></div></div>
+        <div class="panel-head"><div><span class="section-tag">AUDIT LEDGER</span><h3>当前周期操作记录</h3></div><div class="filters"><button class="active" data-filter="all">全部</button><button data-filter="sell">已卖出</button><button data-filter="buy">买入/加回</button><button data-filter="review">待复核</button></div></div>
         <div class="table-wrap"><table><thead><tr><th>时间</th><th>动作</th><th>标的</th><th>成本价</th><th>卖出价</th><th>仓位</th><th>单腿收益</th><th>状态</th><th>原始消息</th></tr></thead><tbody id="ledgerRows"></tbody></table></div>
         <div class="pager"><span id="ledgerCount">—</span><button id="showMore">再显示 50 条</button></div>
       </section>
@@ -103,7 +131,7 @@
         <article class="panel method"><span class="section-tag">CAPITAL PLAN · V1</span><h3>有限资金跟单规则</h3><p>本金 $1,000,000；总仓位上限 70%；单标的上限 12%；常规仓按 6 批拆分，每批约占当时权益 2%。加回优先复用最近卖出数量，否则按一批计算。</p><div class="capital-bar"><i></i><span>最多部署 70% · 至少保留 30% 现金</span></div></article>
       </section>
 
-      <footer><span>原始 Discord 内容和逐笔跟单流水只在本机数据库展示；公开 GitHub Pages 仅保留聚合曲线。</span><span>history-rules-v1 · finite-capital-v1</span></footer>
+      <footer><span>本机：Discord 网关秒级接收 + 每 60 秒补漏 + 页面事件流刷新；公开页只显示脱敏快照。</span><span>history-rules-v1 · finite-capital-v1 · v0.5.0</span></footer>
     </main>
   </div>
   <div id="toast" class="toast" role="status"></div>

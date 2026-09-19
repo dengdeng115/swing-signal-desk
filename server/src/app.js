@@ -21,12 +21,19 @@ export function createApp({ config, repository, quoteService = null }) {
 
   app.get('/api/health', async (_request, response, next) => {
     try {
-      response.json({ ok: true, version: '0.4.0', integrations: { discord: config.discord.enabled, ai: config.ai.enabled }, ...(await repository.health()) });
+      response.json({ ok: true, version: '0.5.0', integrations: { discord: config.discord.enabled, ai: config.ai.enabled }, runtime: app.locals.integrationStatus?.() || null, ...(await repository.health()) });
     } catch (error) { next(error); }
   });
 
   app.get('/api/dashboard', async (_request, response, next) => {
     try { response.json(await repository.dashboard()); } catch (error) { next(error); }
+  });
+
+  app.post('/api/discord/sync', async (_request, response, next) => {
+    try {
+      if (!app.locals.discordSync) return response.status(503).json({ error: 'discord_sync_unavailable' });
+      response.json(await app.locals.discordSync());
+    } catch (error) { next(error); }
   });
 
   app.get('/api/market/quotes', async (request, response, next) => {
